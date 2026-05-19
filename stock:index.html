@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weekly House Stock Check</title>
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f2;
+      color: #1f2933;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      max-width: 900px;
+      margin-inline: auto;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      background: #f5f5f2;
+      padding: 12px 0;
+      z-index: 5;
+      border-bottom: 1px solid #ddd;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin: 0 0 8px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    button, input, select {
+      font: inherit;
+      border-radius: 8px;
+      border: 1px solid #bbb;
+      padding: 10px;
+    }
+
+    button {
+      background: #243b53;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: #6b7280;
+    }
+
+    button.danger {
+      background: #9f1239;
+    }
+
+    .progress {
+      font-size: 0.9rem;
+      color: #4b5563;
+      margin-top: 4px;
+    }
+
+    section {
+      background: white;
+      border-radius: 14px;
+      padding: 14px;
+      margin: 16px 0;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      margin: 0 0 10px;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      border-top: 1px solid #eee;
+    }
+
+    label:first-of-type {
+      border-top: none;
+    }
+
+    input[type="checkbox"] {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 auto;
+    }
+
+    .checked {
+      color: #777;
+      text-decoration: line-through;
+    }
+
+    .add-item {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .add-item input {
+      flex: 1;
+    }
+
+    .shopping-list {
+      white-space: pre-wrap;
+      background: #f9fafb;
+      border: 1px dashed #bbb;
+      padding: 12px;
+      border-radius: 10px;
+      min-height: 80px;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        padding: 10px;
+      }
+
+      .controls, .add-item {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Weekly House Stock Check</h1>
+    <div class="progress" id="progressText">Loading...</div>
+    <div class="controls">
+      <button id="copyButton">Copy shopping list</button>
+      <button class="secondary" id="topButton">Back to top</button>
+      <button class="danger" id="resetButton">Reset ticks</button>
+    </div>
+  </header>
+
+  <main id="app"></main>
+
+  <section>
+    <h2>Missing Items to Add</h2>
+    <div id="shoppingList" class="shopping-list"></div>
+  </section>
+
+  <script>
+    const defaultSections = {
+      "Kitchen – Food Basics": [
+        "Bread / wraps / pittas", "Milk", "Butter / spread", "Cheese", "Eggs",
+        "Yoghurt", "Fruit", "Salad / fresh veg", "Frozen veg", "Potatoes / rice / pasta",
+        "Tins: beans / tomatoes / chickpeas / tuna", "Cooking oil", "Stock cubes / gravy",
+        "Sauces / condiments", "Cereal / porridge", "Snacks / crisps / biscuits", "Toddler snacks"
+      ],
+      "Kitchen – Drinks": ["Coffee", "Tea bags", "Squash / juice", "Fizzy drinks / energy drinks"],
+      "Fridge / Freezer": [
+        "Batch meals available", "Easy backup meals", "Meat / fish / veggie protein",
+        "Ice blocks / frozen fruit", "Ready meals / emergency dinners"
+      ],
+      "Cleaning / Dishwasher": [
+        "Washing-up liquid", "Dishwasher tablets", "Dishwasher salt / rinse aid",
+        "Surface spray", "Antibacterial wipes", "Bin bags", "Kitchen roll", "Sponges / cloths"
+      ],
+      "Laundry": ["Washing detergent", "Fabric conditioner", "Stain remover", "Laundry sanitiser"],
+      "Bathroom": [
+        "Toilet roll", "Hand soap", "Shower gel", "Shampoo", "Conditioner",
+        "Toothpaste", "Deodorant", "Razors / shaving gel", "Bath cleaner", "Toilet cleaner"
+      ],
+      "Baby / Toddler": [
+        "Nappies / pull-ups", "Wipes", "Nappy bags", "Child bubble bath / wash",
+        "Calpol / child medicine", "Toddler toothpaste", "Nursery snacks / packed items"
+      ],
+      "Household / Misc": [
+        "Batteries", "Light bulbs", "Tissues", "Foil", "Cling film",
+        "Baking paper", "Food bags"
+      ],
+      "Final Check": [
+        "Check fridge door shelves", "Check freezer gaps", "Check under-sink cupboard",
+        "Check bathroom cupboard", "Check laundry area", "Add anything nearly empty to shopping list"
+      ]
+    };
+
+    let data = JSON.parse(localStorage.getItem("stockCheckData")) || defaultSections;
+    let checked = JSON.parse(localStorage.getItem("stockCheckChecked")) || {};
+    let missing = JSON.parse(localStorage.getItem("stockCheckMissing")) || [];
+
+    function save() {
+      localStorage.setItem("stockCheckData", JSON.stringify(data));
+      localStorage.setItem("stockCheckChecked", JSON.stringify(checked));
+      localStorage.setItem("stockCheckMissing", JSON.stringify(missing));
+    }
+
+    function itemId(section, item) {
+      return `${section}::${item}`;
+    }
+
+    function render() {
+      const app = document.getElementById("app");
+      app.innerHTML = "";
+
+      Object.entries(data).forEach(([section, items]) => {
+        const box = document.createElement("section");
+        const title = document.createElement("h2");
+        title.textContent = section;
+        box.appendChild(title);
+
+        items.forEach(item => {
+          const id = itemId(section, item);
+          const label = document.createElement("label");
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = !!checked[id];
+
+          const span = document.createElement("span");
+          span.textContent = item;
+          if (checkbox.checked) span.classList.add("checked");
+
+          checkbox.addEventListener("change", () => {
+            checked[id] = checkbox.checked;
+            if (checkbox.checked) {
+              if (!missing.includes(item)) missing.push(item);
+            } else {
+              missing = missing.filter(x => x !== item);
+            }
+            save();
+            render();
+          });
+
+          label.appendChild(checkbox);
+          label.appendChild(span);
+          box.appendChild(label);
+        });
+
+        const addDiv = document.createElement("div");
+        addDiv.className = "add-item";
+
+        const input = document.createElement("input");
+        input.placeholder = `Add item to ${section}`;
+
+        const addButton = document.createElement("button");
+        addButton.textContent = "Add";
+        addButton.onclick = () => {
+          const value = input.value.trim();
+          if (!value) return;
+          data[section].push(value);
+          save();
+          render();
+        };
+
+        addDiv.appendChild(input);
+        addDiv.appendChild(addButton);
+        box.appendChild(addDiv);
+        app.appendChild(box);
+      });
+
+      renderShoppingList();
+      updateProgress();
+    }
+
+    function renderShoppingList() {
+      const list = document.getElementById("shoppingList");
+      if (missing.length === 0) {
+        list.textContent = "Tick items above when they need adding to the weekly shop.";
+      } else {
+        list.textContent = missing.map(item => `- ${item}`).join("\n");
+      }
+    }
+
+    function updateProgress() {
+      const total = Object.values(data).flat().length;
+      const count = Object.keys(checked).filter(k => checked[k]).length;
+      document.getElementById("progressText").textContent =
+        `${count} item${count === 1 ? "" : "s"} marked for shopping out of ${total} checked points.`;
+    }
+
+    function copyShoppingList() {
+      const text = missing.length ? missing.map(item => `- ${item}`).join("\n") : "";
+      navigator.clipboard.writeText(text).then(() => {
+        alert("Shopping list copied.");
+      });
+    }
+
+    function resetChecks() {
+      checked = {};
+      missing = [];
+      localStorage.removeItem("stockCheckChecked");
+      localStorage.removeItem("stockCheckMissing");
+      save();
+      render();
+    }
+
+    function backToTop() {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    document.getElementById("copyButton").addEventListener("click", copyShoppingList);
+    document.getElementById("topButton").addEventListener("click", backToTop);
+    document.getElementById("resetButton").addEventListener("click", resetChecks);
+
+    render();
+  </script>
+</body>
+</html>
