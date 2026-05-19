@@ -1,373 +1,48 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#111827" />
-  <title>Freezer Scan</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jonathan Tools</title>
+
   <style>
-    :root {
-      --bg: #f3f4f6;
-      --card: #ffffff;
-      --text: #111827;
-      --muted: #6b7280;
-      --line: #e5e7eb;
-      --accent: #111827;
-      --danger: #b91c1c;
-      --warn: #92400e;
-      --ok: #166534;
-      --soft: #f9fafb;
-    }
-    * { box-sizing: border-box; }
     body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      padding: env(safe-area-inset-top) 14px 24px;
+      font-family: Arial, sans-serif;
+      padding: 24px;
+      background: #f4f4f4;
     }
-    header { padding: 18px 2px 10px; }
-    h1 { margin: 0; font-size: 1.7rem; letter-spacing: -0.04em; }
-    .sub { color: var(--muted); margin-top: 4px; font-size: .95rem; }
+
+    h1 {
+      margin-bottom: 24px;
+    }
+
     .card {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 14px;
-      margin: 12px 0;
-      box-shadow: 0 1px 4px rgba(0,0,0,.04);
-    }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    button, input, select, textarea {
-      width: 100%;
-      font: inherit;
-      border-radius: 12px;
-      border: 1px solid var(--line);
-      padding: 12px;
       background: white;
-      color: var(--text);
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 16px;
     }
-    button {
-      border: none;
-      background: var(--accent);
-      color: white;
-      font-weight: 700;
-      cursor: pointer;
+
+    a {
+      text-decoration: none;
+      font-size: 20px;
+      font-weight: bold;
     }
-    button.secondary { background: #e5e7eb; color: var(--text); }
-    button.danger { background: var(--danger); }
-    button.small { padding: 8px 10px; font-size: .9rem; border-radius: 10px; }
-    label { font-size: .82rem; color: var(--muted); display: block; margin: 10px 0 5px; }
-    .row { display: flex; gap: 8px; align-items: center; }
-    .row > * { flex: 1; }
-    .hidden { display: none !important; }
-    video {
-      width: 100%;
-      max-height: 300px;
-      object-fit: cover;
-      border-radius: 16px;
-      background: #000;
+
+    p {
+      color: #666;
     }
-    .item {
-      border-top: 1px solid var(--line);
-      padding: 12px 0;
-    }
-    .item:first-child { border-top: none; }
-    .item-title { font-weight: 800; font-size: 1.05rem; }
-    .meta { color: var(--muted); font-size: .88rem; margin-top: 4px; line-height: 1.35; }
-    .pill {
-      display: inline-block;
-      font-size: .75rem;
-      padding: 4px 8px;
-      border-radius: 999px;
-      background: var(--soft);
-      border: 1px solid var(--line);
-      margin: 6px 5px 0 0;
-    }
-    .pill.warn { color: var(--warn); border-color: #f59e0b; background: #fffbeb; }
-    .pill.danger { color: var(--danger); border-color: #ef4444; background: #fef2f2; }
-    .pill.ok { color: var(--ok); border-color: #22c55e; background: #f0fdf4; }
-    .toolbar { position: sticky; top: env(safe-area-inset-top); z-index: 3; background: rgba(243,244,246,.96); padding: 8px 0; backdrop-filter: blur(8px); }
-    .empty { text-align: center; color: var(--muted); padding: 22px 10px; }
-    .footer-note { color: var(--muted); font-size: .78rem; line-height: 1.4; padding: 8px 4px; }
   </style>
 </head>
+
 <body>
-  <header>
-    <h1>Freezer Scan</h1>
-    <div class="sub">Barcode freezer inventory. Stored only on this device.</div>
-  </header>
 
-  <section class="card">
-    <div class="grid">
-      <button id="scanBtn">Scan barcode</button>
-      <button class="secondary" id="manualBtn">Manual add</button>
-    </div>
-    <div id="scanner" class="hidden" style="margin-top:12px;">
-      <video id="video" playsinline></video>
-      <div class="row" style="margin-top:10px;">
-        <button class="secondary" id="stopScanBtn">Stop</button>
-      </div>
-      <div class="footer-note" id="scanMsg">Point camera at barcode.</div>
-    </div>
-  </section>
+<h1>Jonathan Tools</h1>
 
-  <section id="formCard" class="card hidden">
-    <h2 style="margin:0 0 6px;font-size:1.15rem;">Add / edit item</h2>
-    <label>Barcode</label>
-    <input id="barcode" placeholder="Scanned or manual barcode" />
+<div class="card">
+  <a href="./freezer/">Freezer Scanner</a>
+  <p>Barcode freezer inventory and meal tracking.</p>
+</div>
 
-    <label>Item name</label>
-    <input id="name" placeholder="e.g. Beef stew, chicken curry, fish pie" />
-
-    <div class="grid">
-      <div>
-        <label>Portions</label>
-        <input id="portions" type="number" min="1" step="1" value="1" />
-      </div>
-      <div>
-        <label>Category</label>
-        <select id="category">
-          <option>Batch meal</option>
-          <option>Meat / protein</option>
-          <option>Vegetables</option>
-          <option>Ready meal</option>
-          <option>Carbs</option>
-          <option>Other</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="grid">
-      <div>
-        <label>Frozen date</label>
-        <input id="frozenDate" type="date" />
-      </div>
-      <div>
-        <label>Use within months</label>
-        <input id="useMonths" type="number" min="1" step="1" value="3" />
-      </div>
-    </div>
-
-    <label>Notes</label>
-    <textarea id="notes" rows="2" placeholder="e.g. serve with rice, microwave from frozen, Erin liked it"></textarea>
-
-    <div class="grid" style="margin-top:12px;">
-      <button id="saveBtn">Save item</button>
-      <button class="secondary" id="cancelBtn">Cancel</button>
-    </div>
-  </section>
-
-  <div class="toolbar">
-    <input id="search" placeholder="Search freezer..." />
-  </div>
-
-  <section class="card">
-    <div class="row" style="margin-bottom:8px;">
-      <select id="sort">
-        <option value="oldest">Oldest first</option>
-        <option value="newest">Newest first</option>
-        <option value="name">Name A-Z</option>
-        <option value="portions">Most portions</option>
-      </select>
-      <button class="secondary" id="exportBtn">Export</button>
-    </div>
-    <div id="list"></div>
-  </section>
-
-  <section class="card">
-    <button class="danger" id="clearBtn">Clear all freezer data</button>
-    <div class="footer-note">Tip: add this page to your iPhone Home Screen after hosting it on GitHub Pages. Camera scanning normally needs HTTPS.</div>
-  </section>
-
-<script>
-const STORAGE_KEY = 'freezer-scan-items-v1';
-let items = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-let editingId = null;
-let stream = null;
-let scanLoopActive = false;
-
-const $ = id => document.getElementById(id);
-const today = () => new Date().toISOString().slice(0,10);
-$('frozenDate').value = today();
-
-function saveStore(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); }
-function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2); }
-function daysBetween(dateStr){
-  const d = new Date(dateStr + 'T00:00:00');
-  return Math.floor((Date.now() - d.getTime()) / 86400000);
-}
-function useByDate(item){
-  const d = new Date(item.frozenDate + 'T00:00:00');
-  d.setMonth(d.getMonth() + Number(item.useMonths || 3));
-  return d;
-}
-function statusPill(item){
-  const daysLeft = Math.ceil((useByDate(item).getTime() - Date.now()) / 86400000);
-  if (daysLeft < 0) return `<span class="pill danger">Over guide by ${Math.abs(daysLeft)}d</span>`;
-  if (daysLeft <= 14) return `<span class="pill warn">Use soon: ${daysLeft}d</span>`;
-  return `<span class="pill ok">OK: ${daysLeft}d left</span>`;
-}
-function escapeHtml(s){ return String(s || '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
-
-function render(){
-  const q = $('search').value.toLowerCase().trim();
-  let filtered = items.filter(i => [i.name,i.barcode,i.category,i.notes].join(' ').toLowerCase().includes(q));
-  const sort = $('sort').value;
-  filtered.sort((a,b)=>{
-    if(sort==='oldest') return new Date(a.frozenDate) - new Date(b.frozenDate);
-    if(sort==='newest') return new Date(b.frozenDate) - new Date(a.frozenDate);
-    if(sort==='name') return a.name.localeCompare(b.name);
-    if(sort==='portions') return Number(b.portions) - Number(a.portions);
-  });
-
-  if(!filtered.length){ $('list').innerHTML = '<div class="empty">No freezer items yet.</div>'; return; }
-  $('list').innerHTML = filtered.map(item => `
-    <div class="item">
-      <div class="item-title">${escapeHtml(item.name || 'Unnamed item')}</div>
-      <div class="meta">
-        ${escapeHtml(item.category)} · ${item.portions} portion${Number(item.portions)===1?'':'s'} · frozen ${escapeHtml(item.frozenDate)} · ${daysBetween(item.frozenDate)}d ago<br>
-        Barcode: ${escapeHtml(item.barcode || 'none')}
-        ${item.notes ? `<br>Notes: ${escapeHtml(item.notes)}` : ''}
-      </div>
-      ${statusPill(item)}<span class="pill">Use by guide: ${useByDate(item).toISOString().slice(0,10)}</span>
-      <div class="grid" style="margin-top:10px;">
-        <button class="small secondary" onclick="usePortion('${item.id}')">Use 1 portion</button>
-        <button class="small secondary" onclick="editItem('${item.id}')">Edit</button>
-      </div>
-      <button class="small danger" style="margin-top:8px;" onclick="deleteItem('${item.id}')">Delete</button>
-    </div>
-  `).join('');
-}
-
-function openForm(barcode=''){
-  editingId = null;
-  $('barcode').value = barcode;
-  $('name').value = '';
-  $('portions').value = 1;
-  $('category').value = 'Batch meal';
-  $('frozenDate').value = today();
-  $('useMonths').value = 3;
-  $('notes').value = '';
-  $('formCard').classList.remove('hidden');
-  $('name').focus();
-}
-
-function editItem(id){
-  const item = items.find(i=>i.id===id); if(!item) return;
-  editingId = id;
-  $('barcode').value = item.barcode || '';
-  $('name').value = item.name || '';
-  $('portions').value = item.portions || 1;
-  $('category').value = item.category || 'Other';
-  $('frozenDate').value = item.frozenDate || today();
-  $('useMonths').value = item.useMonths || 3;
-  $('notes').value = item.notes || '';
-  $('formCard').classList.remove('hidden');
-  window.scrollTo({top:0, behavior:'smooth'});
-}
-window.editItem = editItem;
-
-function usePortion(id){
-  const item = items.find(i=>i.id===id); if(!item) return;
-  item.portions = Math.max(0, Number(item.portions)-1);
-  if(item.portions === 0 && confirm('No portions left. Delete this item?')) items = items.filter(i=>i.id!==id);
-  saveStore(); render();
-}
-window.usePortion = usePortion;
-
-function deleteItem(id){
-  if(confirm('Delete this freezer item?')) { items = items.filter(i=>i.id!==id); saveStore(); render(); }
-}
-window.deleteItem = deleteItem;
-
-$('saveBtn').onclick = () => {
-  const data = {
-    barcode: $('barcode').value.trim(),
-    name: $('name').value.trim(),
-    portions: Number($('portions').value || 1),
-    category: $('category').value,
-    frozenDate: $('frozenDate').value || today(),
-    useMonths: Number($('useMonths').value || 3),
-    notes: $('notes').value.trim()
-  };
-  if(!data.name){ alert('Add an item name.'); return; }
-  if(editingId){
-    items = items.map(i => i.id === editingId ? {...i, ...data} : i);
-  } else {
-    const existing = data.barcode ? items.find(i => i.barcode === data.barcode && i.name.toLowerCase() === data.name.toLowerCase()) : null;
-    if(existing && confirm('Same barcode/name found. Add portions to existing item instead?')){
-      existing.portions = Number(existing.portions) + data.portions;
-      existing.notes = data.notes || existing.notes;
-    } else {
-      items.push({id: uid(), ...data, createdAt: new Date().toISOString()});
-    }
-  }
-  saveStore(); $('formCard').classList.add('hidden'); render();
-};
-$('cancelBtn').onclick = () => $('formCard').classList.add('hidden');
-$('manualBtn').onclick = () => openForm('');
-$('search').oninput = render;
-$('sort').onchange = render;
-
-$('exportBtn').onclick = async () => {
-  const text = JSON.stringify(items, null, 2);
-  try { await navigator.clipboard.writeText(text); alert('Freezer data copied to clipboard as JSON.'); }
-  catch { prompt('Copy your freezer data:', text); }
-};
-$('clearBtn').onclick = () => {
-  if(confirm('This deletes all freezer data stored on this device. Continue?')){ items = []; saveStore(); render(); }
-};
-
-async function startScan(){
-  if(!('BarcodeDetector' in window)){
-    alert('Barcode scanning is not supported in this browser. Use manual add, or try Chrome/Edge/Safari with HTTPS.');
-    openForm('');
-    return;
-  }
-  try {
-    $('scanner').classList.remove('hidden');
-    $('scanMsg').textContent = 'Starting camera...';
-    stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment'}});
-    $('video').srcObject = stream;
-    await $('video').play();
-    const detector = new BarcodeDetector({formats: ['ean_13','ean_8','upc_a','upc_e','code_128','qr_code']});
-    scanLoopActive = true;
-    $('scanMsg').textContent = 'Point camera at barcode.';
-    const loop = async () => {
-      if(!scanLoopActive) return;
-      try {
-        const codes = await detector.detect($('video'));
-        if(codes.length){
-          const code = codes[0].rawValue;
-          stopScan();
-          const match = items.find(i => i.barcode === code);
-          if(match){
-            if(confirm(`Found existing item: ${match.name}. Add another portion?`)){
-              match.portions = Number(match.portions) + 1;
-              saveStore(); render();
-            } else editItem(match.id);
-          } else openForm(code);
-          return;
-        }
-      } catch(e) { console.warn(e); }
-      requestAnimationFrame(loop);
-    };
-    loop();
-  } catch(err){
-    alert('Could not start camera. Check permissions, or use manual add.');
-    console.error(err);
-  }
-}
-function stopScan(){
-  scanLoopActive = false;
-  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
-  $('scanner').classList.add('hidden');
-}
-$('scanBtn').onclick = startScan;
-$('stopScanBtn').onclick = stopScan;
-
-render();
-</script>
 </body>
 </html>
