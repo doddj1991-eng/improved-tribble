@@ -80,16 +80,31 @@
       margin: 0 0 10px;
     }
 
+    .item-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-top: 1px solid #eee;
+    }
+
+    .item-row:first-of-type {
+      border-top: none;
+    }
+
     label {
       display: flex;
       align-items: center;
       gap: 10px;
       padding: 8px 0;
-      border-top: 1px solid #eee;
+      flex: 1;
     }
 
-    label:first-of-type {
-      border-top: none;
+    .delete-item {
+      background: #9f1239;
+      padding: 6px 9px;
+      border-radius: 7px;
+      font-size: 0.85rem;
+      flex: 0 0 auto;
     }
 
     input[type="checkbox"] {
@@ -187,9 +202,22 @@
       ]
     };
 
-    let data = JSON.parse(localStorage.getItem("stockCheckData")) || defaultSections;
-    let checked = JSON.parse(localStorage.getItem("stockCheckChecked")) || {};
-    let missing = JSON.parse(localStorage.getItem("stockCheckMissing")) || [];
+    function cloneDefaults() {
+      return JSON.parse(JSON.stringify(defaultSections));
+    }
+
+    function loadJSON(key, fallback) {
+      try {
+        const stored = localStorage.getItem(key);
+        return stored ? JSON.parse(stored) : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    let data = loadJSON("stockCheckData", cloneDefaults());
+    let checked = loadJSON("stockCheckChecked", {});
+    let missing = loadJSON("stockCheckMissing", []);
 
     function save() {
       localStorage.setItem("stockCheckData", JSON.stringify(data));
@@ -211,8 +239,12 @@
         title.textContent = section;
         box.appendChild(title);
 
-        items.forEach(item => {
+        items.forEach((item, index) => {
           const id = itemId(section, item);
+
+          const row = document.createElement("div");
+          row.className = "item-row";
+
           const label = document.createElement("label");
           const checkbox = document.createElement("input");
           checkbox.type = "checkbox";
@@ -233,9 +265,27 @@
             render();
           });
 
+          const deleteButton = document.createElement("button");
+          deleteButton.type = "button";
+          deleteButton.className = "delete-item";
+          deleteButton.textContent = "Delete";
+          deleteButton.onclick = () => {
+            const ok = confirm(`Delete "${item}" from ${section}?`);
+            if (!ok) return;
+
+            data[section].splice(index, 1);
+            delete checked[id];
+            missing = missing.filter(x => x !== item);
+
+            save();
+            render();
+          };
+
           label.appendChild(checkbox);
           label.appendChild(span);
-          box.appendChild(label);
+          row.appendChild(label);
+          row.appendChild(deleteButton);
+          box.appendChild(row);
         });
 
         const addDiv = document.createElement("div");
@@ -249,6 +299,10 @@
         addButton.onclick = () => {
           const value = input.value.trim();
           if (!value) return;
+          if (data[section].includes(value)) {
+            alert("That item is already in this section.");
+            return;
+          }
           data[section].push(value);
           save();
           render();
@@ -290,9 +344,12 @@
     function resetChecks() {
       checked = {};
       missing = [];
+
+      // Keep stockCheckData intact so any added or deleted items persist.
+      localStorage.setItem("stockCheckData", JSON.stringify(data));
       localStorage.removeItem("stockCheckChecked");
       localStorage.removeItem("stockCheckMissing");
-      save();
+
       render();
     }
 
