@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RFQ Manager</title>
+  <meta name="description" content="RFQ Management Tool"/>
+  <meta name="theme-color" content="#ffffff"/>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; font-size: 15px; }
+    #root { max-width: 680px; margin: 0 auto; padding: 0 1rem 4rem; }
+    input, select, textarea, button {
+      font-family: inherit; font-size: 14px;
+      border: 0.5px solid #d0d0d0; border-radius: 8px;
+      padding: 8px 12px; outline: none; color: #1a1a1a; background: #fff;
+    }
+    input:focus, select:focus, textarea:focus { border-color: #888; }
+    button { cursor: pointer; background: #f5f5f5; }
+    button:hover { background: #ececec; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const RFQ_KEY   = "rfq_v3_rfqs";
+const SKU_KEY   = "rfq_v3_skus";
+const QUOTE_KEY = "rfq_v3_quotes";
+const STATUSES  = ["Draft","Sent","Received","Awarded","Cancelled"];
+
+const S = {
+  Draft:     {bg:"#F1EFE8",color:"#5F5E5A"},
+  Sent:      {bg:"#E6F1FB",color:"#185FA5"},
+  Received:  {bg:"#EEEDFE",color:"#534AB7"},
+  Awarded:   {bg:"#EAF3DE",color:"#3B6D11"},
+  Cancelled: {bg:"#FCEBEB",color:"#A32D2D"},
+};
+const HCOLS = ["#E6F1FB","#EEEDFE","#EAF3DE","#FAECE7","#FAEEDA"];
+const hc  = str => HCOLS[str.split("").reduce((a,c)=>a+c.charCodeAt(0),0)%HCOLS.length];
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2);
+const fmt    = n => (n===""||n===null||n===undefined||isNaN(Number(n)))?null:Number(n);
+const fmtC   = n => n===null?"—":`£${Number(n).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const fmtPct = n => `${n>0?"+":""}${n.toFixed(1)}%`;
+const delta  = (val,base,vol) => {
+  const v=fmt(val),b=fmt(base),q=fmt(vol);
+  if(v===null||b===null||b===0) return {unit:"—",total:null,pct:"",col:"#888"};
+  const d=v-b, p=(d/b)*100;
+  return {unit:fmtC(d),total:q!==null?fmtC(d*q):null,pct:fmtPct(p),col:d<0?"#3B6D11":d>0?"#A32D2D":"#888"};
+};
+
+const ls = {
+  get: k => { try { const v=localStorage.getItem(k); return v?JSON.parse(v):[]; } catch{ return []; }},
+  set: (k,v) => { try { localStorage.setItem(k,JSON.stringify(v)); } catch{} }
+};
+
+const Badge = ({s}) => <span style={{background:S[s]?.bg,color:S[s]?.color,fontSize:11,fontWeight:500,padding:"3px 10px",borderRadius:20,whiteSpace:"nowrap"}}>{s}</span>;
+const Lbl = ({c}) => <div style={{fontSize:12,color:"#888",marginBottom:5,fontWeight:500}}>{c}</div>;
+const Chip = ({label,value,sub,col}) => (
+  <div style={{background:"#f7f7f7",borderRadius:8,padding:"8px 12px"}}>
+    <div style={{fontSize:10,color:"#888",marginBottom:3,fontWeight:500,letterSpacing:"0.03em",textTransform:"uppercase"}}>{label}</div>
+    <div style={{fontSize:13,fontWeight:500,color:col||"#1a1a1a"}}>{value}</div>
+    {sub&&<div style={{fontSize:11,color:col||"#888",marginTop:1}}>{sub}</div>}
+  </div>
+);
+const Card = ({children,style={},onClick,onMouseEnter,onMouseLeave}) => (
+  <div onClick={onClick} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}
+    style={{background:"#fff",border:"0.5px solid #e0e0e0",borderRadius:12,padding:"1rem 1.25rem",...style}}>
+    {children}
+  </div>
+);
+const PBtn = ({onClick,children,style={}}) => (
+  <button onClick={onClick} style={{background:"#1a1a1a",color:"#fff",border:"none",borderRadius:8,padding:"9px 20px",fontWeight:500,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",gap:6,...style}}>{children}</button>
+);
+const GBtn = ({onClick,children}) => <button onClick={onClick} style={{fontSize:12,padding:"4px 10px",cursor:"pointer",borderRadius:8}}>{children}</button>;
+const DBtn = ({onClick,children}) => <button onClick={onClick} style={{fontSize:12,padding:"4px 10px",color:"#A32D2D",border:"0.5px solid #E24B4A",borderRadius:8,background:"transparent",cursor:"pointer"}}>{children}</button>;
+const ConfirmBar = ({msg,onOk,onCancel}) => (
+  <div style={{marginTop:10,background:"#FEF2F2",border:"0.5px solid #E24B4A",borderRadius:8,padding:"10px 14px"}}>
+    <div style={{fontSize:13,color:"#A32D2D",marginBottom:8}}>{msg}</div>
+    <div style={{display:"flex",gap:8}}>
+      <button onClick={onOk} style={{fontSize:12,padding:"4px 14px",background:"#A32D2D",color:"white",border:"none",borderRadius:8,cursor:"pointer"}}>Yes, delete</button>
+      <button onClick={onCancel} style={{fontSize:12,padding:"4px 14px"}}>Cancel</button>
+    </div>
+  </div>
+);
+const Inp = ({value,onChange,type="text",placeholder=""}) => (
+  <input type={type} value={value} onChange={onChange} placeholder={placeholder} style={{width:"100%"}}/>
+);
+const TA = ({value,onChange,rows=2}) => (
+  <textarea rows={rows} value={value} onChange={onChange}
+    style={{width:"100%",resize:"vertical",fontFamily:"inherit",fontSize:14,padding:"8px 12px",border:"0.5px solid #d0d0d0",borderRadius:8,background:"#fff",color:"#1a1a1a"}}/>
+);
+
+const emptyRfq   = {title:"",dueDate:"",status:"Draft",notes:""};
+const emptySku   = {code:"",description:"",uom:"",targetQty:"",budgetPrice:"",listPrice:""};
+const emptyQuote = {supplier:"",status:"Draft",quotePrice:"",volume:"",leadTime:"",notes:""};
+
+function App() {
+  const [rfqs,   setRfqs]   = useState(()=>ls.get(RFQ_KEY));
+  const [skus,   setSkus]   = useState(()=>ls.get(SKU_KEY));
+  const [quotes, setQuotes] = useState(()=>ls.get(QUOTE_KEY));
+  const [view,   setView]   = useState("list");
+  const [selRfq, setSelRfq] = useState(null);
+  const [selSku, setSelSku] = useState(null);
+  const [rfqForm,  setRfqForm]   = useState(emptyRfq);
+  const [editRfqId,setEditRfqId] = useState(null);
+  const [skuForm,  setSkuForm]   = useState(emptySku);
+  const [editSkuId,setEditSkuId] = useState(null);
+  const [skuStep,  setSkuStep]   = useState(1);
+  const [pendingSku,setPendingSku]         = useState(null);
+  const [checkedSuppliers,setCheckedSuppliers] = useState([]);
+  const [newSupplierInput,setNewSupplierInput] = useState("");
+  const [qForm,  setQForm]   = useState(emptyQuote);
+  const [editQId,setEditQId] = useState(null);
+  const [delRfq, setDelRfq]  = useState(false);
+  const [delSku, setDelSku]  = useState(null);
+  const [delQ,   setDelQ]    = useState(null);
+  const [collapsed,setCollapsed]   = useState({});
+  const [excludedSkus,setExcludedSkus] = useState({});
+  const [tab,    setTab]     = useState("skus");
+  const [filter, setFilter]  = useState("All");
+  const [search, setSearch]  = useState("");
+
+  const save = (nr,ns,nq) => {
+    if(nr!==undefined){setRfqs(nr);  ls.set(RFQ_KEY,nr);}
+    if(ns!==undefined){setSkus(ns);  ls.set(SKU_KEY,ns);}
+    if(nq!==undefined){setQuotes(nq);ls.set(QUOTE_KEY,nq);}
+  };
+
+  const rSkus   = id => skus.filter(s=>s.rfqId===id);
+  const sQuotes = id => quotes.filter(q=>q.skuId===id);
+  const tog     = id => setCollapsed(c=>({...c,[id]:!c[id]}));
+  const rfqSuppliers = rfqId => [...new Set(rSkus(rfqId).flatMap(s=>sQuotes(s.id).map(q=>q.supplier)))].sort();
+
+  const BackBtn = ({to,label="Back"}) => (
+    <button onClick={()=>setView(to)} style={{background:"none",border:"none",cursor:"pointer",padding:"6px 10px",color:"#888",fontSize:13,display:"flex",alignItems:"center",gap:4}}>← {label}</button>
+  );
+
+  // ── RFQ FORM ─────────────────────────────────────────
+  if(view==="rfqForm") return (
+    <div style={{padding:"1rem 0"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"1.5rem"}}>
+        <BackBtn to="list" label="All RFQs"/>
+        <h2 style={{margin:0,fontSize:18,fontWeight:500}}>{editRfqId?"Edit RFQ":"New RFQ"}</h2>
+      </div>
+      <Card>
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div><Lbl c="Title *"/><Inp value={rfqForm.title} onChange={e=>setRfqForm(f=>({...f,title:e.target.value}))} placeholder="e.g. Q3 Office Refit"/></div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+            <div><Lbl c="Due date"/><Inp type="date" value={rfqForm.dueDate} onChange={e=>setRfqForm(f=>({...f,dueDate:e.target.value}))}/></div>
+            <div><Lbl c="Status"/>
+              <select value={rfqForm.status} onChange={e=>setRfqForm(f=>({...f,status:e.target.value}))} style={{width:"100%"}}>
+                {STATUSES.map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+          <div><Lbl c="Notes"/><TA value={rfqForm.notes} onChange={e=>setRfqForm(f=>({...f,notes:e.target.value}))}/></div>
+          <div style={{display:"flex",gap:10,paddingTop:4}}>
+            <PBtn style={{flex:1,justifyContent:"center"}} onClick={()=>{
+              if(!rfqForm.title.trim()) return;
+              if(editRfqId) save(rfqs.map(r=>r.id===editRfqId?{...rfqForm,id:editRfqId}:r));
+              else save([{...rfqForm,id:uid()},...rfqs]);
+              setView("list");
+            }}>{editRfqId?"Save changes":"Create RFQ"}</PBtn>
+            <button onClick={()=>setView(editRfqId?"detail":"list")} style={{padding:"9px 20px",fontSize:14}}>Cancel</button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+
+  // ── SKU FORM step 1 ───────────────────────────────────
+  if(view==="skuForm"&&skuStep===1) return (
+    <div style={{padding:"1rem 0"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"0.5rem"}}>
+        <BackBtn to="detail"/>
+        <h2 style={{margin:0,fontSize:18,fontWeight:500}}>{editSkuId?"Edit SKU":"Add SKU"}</h2>
+      </div>
+      {!editSkuId&&<div style={{fontSize:12,color:"#888",marginBottom:"1.25rem",paddingLeft:10}}>Step 1 of 2 — SKU details</div>}
+      <Card>
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+            <div><Lbl c="SKU code / part number"/><Inp value={skuForm.code} onChange={e=>setSkuForm(f=>({...f,code:e.target.value}))} placeholder="e.g. CHR-001"/></div>
+            <div><Lbl c="Unit of measure"/><Inp value={skuForm.uom} onChange={e=>setSkuForm(f=>({...f,uom:e.target.value}))} placeholder="e.g. each, kg"/></div>
+            <div style={{gridColumn:"span 2"}}><Lbl c="Description *"/><Inp value={skuForm.description} onChange={e=>setSkuForm(f=>({...f,description:e.target.value}))} placeholder="e.g. Ergonomic office chair"/></div>
+            <div><Lbl c="Target quantity"/><Inp type="number" value={skuForm.targetQty} onChange={e=>setSkuForm(f=>({...f,targetQty:e.target.value}))} placeholder="0"/></div>
+          </div>
+          <div style={{borderTop:"0.5px solid #e0e0e0",paddingTop:14}}>
+            <div style={{fontSize:12,fontWeight:500,color:"#888",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:10}}>Prices (per unit)</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+              <div><Lbl c="Budget price (£)"/><Inp type="number" value={skuForm.budgetPrice} onChange={e=>setSkuForm(f=>({...f,budgetPrice:e.target.value}))} placeholder="0.00"/></div>
+              <div><Lbl c="List price (£)"/><Inp type="number" value={skuForm.listPrice} onChange={e=>setSkuForm(f=>({...f,listPrice:e.target.value}))} placeholder="0.00"/></div>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:10,paddingTop:4}}>
+            {editSkuId?(
+              <PBtn style={{flex:1,justifyContent:"center"}} onClick={()=>{
+                if(!skuForm.description.trim()) return;
+                save(undefined,skus.map(x=>x.id===editSkuId?{...skuForm,rfqId:selRfq.id,id:editSkuId}:x));
+                setView("detail");
+              }}>Save changes</PBtn>
+            ):(
+              <PBtn style={{flex:1,justifyContent:"center"}} onClick={()=>{
+                if(!skuForm.description.trim()) return;
+                const newSku={...skuForm,rfqId:selRfq.id,id:uid()};
+                setPendingSku(newSku);
+                setCheckedSuppliers(rfqSuppliers(selRfq.id));
+                setNewSupplierInput("");
+                setSkuStep(2);
+              }}>Next: assign suppliers →</PBtn>
+            )}
+            <button onClick={()=>setView("detail")} style={{padding:"9px 20px",fontSize:14}}>Cancel</button>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+
+  // ── SKU FORM step 2 ───────────────────────────────────
+  if(view==="skuForm"&&skuStep===2) {
+    const allSuppliers=[...new Set([...rfqSuppliers(selRfq.id),...checkedSuppliers])].sort();
+    const toggle=s=>setCheckedSuppliers(cs=>cs.includes(s)?cs.filter(x=>x!==s):[...cs,s]);
+    const addNew=()=>{
+      const name=newSupplierInput.trim();
+      if(!name) return;
+      if(!checkedSuppliers.includes(name)) setCheckedSuppliers(cs=>[...cs,name]);
+      setNewSupplierInput("");
+    };
+    return (
+      <div style={{padding:"1rem 0"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"0.5rem"}}>
+          <button onClick={()=>setSkuStep(1)} style={{background:"none",border:"none",cursor:"pointer",padding:"6px 10px",color:"#888",fontSize:13,display:"flex",alignItems:"center",gap:4}}>← Back</button>
+          <h2 style={{margin:0,fontSize:18,fontWeight:500}}>Add SKU</h2>
+        </div>
+        <div style={{fontSize:12,color:"#888",marginBottom:"1.25rem",paddingLeft:10}}>Step 2 of 2 — assign suppliers</div>
+        <Card>
+          <div style={{fontSize:13,fontWeight:500,marginBottom:4}}>
+            {pendingSku?.code&&<span style={{fontFamily:"monospace",marginRight:8,fontSize:12,color:"#888"}}>{pendingSku.code}</span>}
+            {pendingSku?.description}
+          </div>
+          <div style={{fontSize:12,color:"#888",marginBottom:16}}>Tick suppliers to create blank quote lines for.</div>
+          {allSuppliers.length>0&&(
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+              {allSuppliers.map(s=>{
+                const checked=checkedSuppliers.includes(s);
+                const sc=hc(s);
+                return (
+                  <label key={s} onClick={()=>toggle(s)} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",
+                    background:checked?sc:"#f7f7f7",border:`1px solid ${checked?"transparent":"#e0e0e0"}`,transition:"all 0.12s"}}>
+                    <input type="checkbox" checked={checked} onChange={()=>toggle(s)} style={{width:16,height:16,cursor:"pointer",accentColor:"#185FA5"}}/>
+                    <div style={{width:28,height:28,borderRadius:6,background:checked?"white":sc,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:600,color:"#555"}}>
+                      {s.slice(0,2).toUpperCase()}
+                    </div>
+                    <span style={{fontSize:14,fontWeight:checked?500:400}}>{s}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          <div style={{borderTop:"0.5px solid #e0e0e0",paddingTop:14,marginBottom:14}}>
+            <Lbl c="Add a new supplier"/>
+            <div style={{display:"flex",gap:8}}>
+              <input value={newSupplierInput} onChange={e=>setNewSupplierInput(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&addNew()} placeholder="e.g. New Supplier Ltd" style={{flex:1}}/>
+              <button onClick={addNew} style={{padding:"7px 14px",fontSize:13}}>Add</button>
+            </div>
+          </div>
+          <div style={{fontSize:12,color:"#888",marginBottom:16}}>
+            {checkedSuppliers.length===0?"No suppliers selected — SKU will be created with no quote lines."
+              :`${checkedSuppliers.length} supplier${checkedSuppliers.length!==1?"s":""} selected — ${checkedSuppliers.length} blank quote line${checkedSuppliers.length!==1?"s":""} will be created.`}
+          </div>
+          <div style={{display:"flex",gap:10}}>
+            <PBtn style={{flex:1,justifyContent:"center"}} onClick={()=>{
+              const newSkus=[...skus,pendingSku];
+              const newQuotes=[...quotes,...checkedSuppliers.map(supplier=>({...emptyQuote,supplier,skuId:pendingSku.id,rfqId:selRfq.id,id:uid()}))];
+              save(undefined,newSkus,newQuotes);
+              setPendingSku(null); setCheckedSuppliers([]); setSkuStep(1); setView("detail");
+            }}>Create SKU{checkedSuppliers.length>0?` + ${checkedSuppliers.length} quote line${checkedSuppliers.length!==1?"s":""}`:""}</PBtn>
+            <button onClick={()=>{setPendingSku(null);setCheckedSuppliers([]);setSkuStep(1);setView("detail");}} style={{padding:"9px 20px",fontSize:14}}>Cancel</button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── QUOTE FORM ────────────────────────────────────────
+  if(view==="quoteForm") {
+    const sku=skus.find(s=>s.id===selSku?.id);
+    const qp=fmt(qForm.quotePrice),bp=fmt(sku?.budgetPrice),lp=fmt(sku?.listPrice),vol=fmt(qForm.volume);
+    const dB=delta(qp,bp,vol),dL=delta(qp,lp,vol);
+    return (
+      <div style={{padding:"1rem 0"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:"0.5rem"}}>
+          <BackBtn to="detail"/>
+          <h2 style={{margin:0,fontSize:18,fontWeight:500}}>{editQId?"Edit quote":"Add quote"}</h2>
+        </div>
+        {sku&&<div style={{fontSize:13,color:"#888",marginBottom:"1.25rem",paddingLeft:10}}>
+          SKU: <b style={{color:"#1a1a1a",fontWeight:500}}>{sku.code?`${sku.code} — `:""}{sku.description}</b>
+        </div>}
+        <Card>
+          <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+              <div style={{gridColumn:"span 2"}}><Lbl c="Supplier *"/><Inp value={qForm.supplier} onChange={e=>setQForm(f=>({...f,supplier:e.target.value}))} placeholder="e.g. Acme Ltd"/></div>
+              <div><Lbl c="Quote price (£)"/><Inp type="number" value={qForm.quotePrice} onChange={e=>setQForm(f=>({...f,quotePrice:e.target.value}))}/></div>
+              <div><Lbl c={`Volume${sku?.targetQty?` (target: ${sku.targetQty})`:""}`}/><Inp type="number" value={qForm.volume} onChange={e=>setQForm(f=>({...f,volume:e.target.value}))}/></div>
+              <div><Lbl c="Lead time"/><Inp value={qForm.leadTime} onChange={e=>setQForm(f=>({...f,leadTime:e.target.value}))}/></div>
+              <div><Lbl c="Status"/>
+                <select value={qForm.status} onChange={e=>setQForm(f=>({...f,status:e.target.value}))} style={{width:"100%"}}>
+                  {STATUSES.map(s=><option key={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            {qp!==null&&(bp!==null||lp!==null)&&(
+              <div style={{borderTop:"0.5px solid #e0e0e0",paddingTop:14}}>
+                <div style={{fontSize:11,color:"#888",fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:10}}>Live delta preview</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  {bp!==null&&<Chip label="Δ vs budget" value={dB.unit} sub={`${dB.pct}${dB.total?` · Total: ${dB.total}`:""}`} col={dB.col}/>}
+                  {lp!==null&&<Chip label="Δ vs list"   value={dL.unit} sub={`${dL.pct}${dL.total?` · Total: ${dL.total}`:""}`} col={dL.col}/>}
+                </div>
+              </div>
+            )}
+            <div><Lbl c="Notes"/><TA value={qForm.notes} onChange={e=>setQForm(f=>({...f,notes:e.target.value}))}/></div>
+            <div style={{display:"flex",gap:10,paddingTop:4}}>
+              <PBtn style={{flex:1,justifyContent:"center"}} onClick={()=>{
+                if(!qForm.supplier.trim()) return;
+                const q={...qForm,skuId:selSku.id,rfqId:selRfq.id,id:editQId||uid()};
+                if(editQId) save(undefined,undefined,quotes.map(x=>x.id===editQId?q:x));
+                else save(undefined,undefined,[...quotes,q]);
+                setView("detail");
+              }}>{editQId?"Save changes":"Add quote"}</PBtn>
+              <button onClick={()=>setView("detail")} style={{padding:"9px 20px",fontSize:14}}>Cancel</button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── RFQ DETAIL ────────────────────────────────────────
+  if(view==="detail"&&selRfq) {
+    const rfq=rfqs.find(r=>r.id===selRfq.id)||selRfq;
+    const rs=rSkus(rfq.id);
+    const totalQ=rs.reduce((a,s)=>a+sQuotes(s.id).length,0);
+    const bannerBg=hc(rfq.title);
+    return (
+      <div style={{padding:"1rem 0"}}>
+        <BackBtn to="list" label="All RFQs"/>
+        {/* Banner */}
+        <div style={{background:bannerBg,borderRadius:12,padding:"1.25rem 1.5rem",margin:"1rem 0 1.25rem"}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+            <div style={{flex:1}}>
+              <h2 style={{margin:"0 0 8px",fontSize:20,fontWeight:500}}>{rfq.title}</h2>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                <Badge s={rfq.status}/>
+                {rfq.dueDate&&<span style={{fontSize:12,color:"#888"}}>Due {rfq.dueDate}</span>}
+                <span style={{fontSize:12,color:"#888"}}>{rs.length} SKU{rs.length!==1?"s":""} · {totalQ} quote{totalQ!==1?"s":""}</span>
+              </div>
+              {rfq.notes&&<div style={{fontSize:13,color:"#888",marginTop:8}}>{rfq.notes}</div>}
+            </div>
+            <div style={{display:"flex",gap:8,flexShrink:0}}>
+              <button onClick={()=>{setRfqForm({title:rfq.title,dueDate:rfq.dueDate,status:rfq.status,notes:rfq.notes});setEditRfqId(rfq.id);setTimeout(()=>setView("rfqForm"),0);}}
+                style={{fontSize:12,padding:"5px 12px",background:"white",border:"0.5px solid #ccc",borderRadius:8,cursor:"pointer"}}>Edit</button>
+              <button onClick={()=>setDelRfq(true)}
+                style={{fontSize:12,padding:"5px 12px",background:"white",color:"#A32D2D",border:"0.5px solid #E24B4A",borderRadius:8,cursor:"pointer"}}>Delete</button>
+            </div>
+          </div>
+          {delRfq&&<ConfirmBar msg={`Delete "${rfq.title}", all SKUs and quotes?`}
+            onOk={()=>{const ids=rs.map(s=>s.id);save(rfqs.filter(r=>r.id!==rfq.id),skus.filter(s=>s.rfqId!==rfq.id),quotes.filter(q=>!ids.includes(q.skuId)));setDelRfq(false);setView("list");}}
+            onCancel={()=>setDelRfq(false)}/>}
+        </div>
+
+        {/* Tabs */}
+        <div style={{display:"flex",gap:8,marginBottom:"1.25rem"}}>
+          {[["skus","SKUs & Quotes"],["rollup","Supplier Rollup"]].map(([k,l])=>(
+            <button key={k} onClick={()=>setTab(k)} style={{fontSize:13,padding:"6px 16px",borderRadius:20,cursor:"pointer",fontWeight:tab===k?500:400,
+              background:tab===k?"#1a1a1a":"transparent",color:tab===k?"#fff":"#888",
+              border:tab===k?"none":"0.5px solid #e0e0e0"}}>{l}</button>
+          ))}
+        </div>
+
+        {/* SKU include/exclude filter (rollup only) */}
+        {tab==="rollup"&&rs.length>0&&(
+          <div style={{marginBottom:14,background:"#f7f7f7",borderRadius:8,padding:"10px 14px"}}>
+            <div style={{fontSize:11,fontWeight:500,color:"#888",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:8}}>Include in rollup calculations</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {rs.map(sku=>{
+                const included=!excludedSkus[sku.id];
+                const sc=hc(sku.code||sku.description);
+                return (
+                  <button key={sku.id} onClick={()=>setExcludedSkus(e=>({...e,[sku.id]:!e[sku.id]}))}
+                    style={{fontSize:12,padding:"4px 10px",borderRadius:20,cursor:"pointer",display:"flex",alignItems:"center",gap:5,
+                      background:included?sc:"transparent",color:included?"#555":"#aaa",
+                      border:`1px solid ${included?"transparent":"#e0e0e0"}`,
+                      textDecoration:included?"none":"line-through",fontWeight:included?500:400}}>
+                    {included?"✓ ":""}{sku.code||sku.description.slice(0,20)}
+                  </button>
+                );
+              })}
+            </div>
+            {Object.values(excludedSkus).some(Boolean)&&(
+              <div style={{fontSize:11,color:"#888",marginTop:8}}>
+                {Object.values(excludedSkus).filter(Boolean).length} SKU{Object.values(excludedSkus).filter(Boolean).length!==1?"s":""} excluded.{" "}
+                <button onClick={()=>setExcludedSkus({})} style={{fontSize:11,background:"none",border:"none",color:"#185FA5",cursor:"pointer",padding:0}}>Reset</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SUPPLIER ROLLUP ── */}
+        {tab==="rollup"&&(()=>{
+          const includedSkus=rs.filter(s=>!excludedSkus[s.id]);
+          const includedSkuCount=includedSkus.length;
+          const allQ=includedSkus.flatMap(s=>sQuotes(s.id).map(q=>({...q,sku:s})));
+          const suppliers=[...new Set(allQ.map(q=>q.supplier))].sort();
+          if(!suppliers.length) return (
+            <div style={{textAlign:"center",padding:"3rem 1rem",color:"#888",fontSize:14,border:"0.5px dashed #ccc",borderRadius:12}}>
+              No quotes yet — add quotes to SKUs to see the rollup.
+            </div>
+          );
+          return (
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {suppliers.map(supplier=>{
+                const sq=allQ.filter(q=>q.supplier===supplier);
+                const skuIds=[...new Set(sq.map(q=>q.skuId))];
+                const pricedSq=sq.filter(q=>fmt(q.quotePrice)!==null);
+                const pricedIds=[...new Set(pricedSq.map(q=>q.skuId))];
+                const unpricedCount=sq.length-pricedSq.length;
+                const totalVal  =pricedSq.reduce((a,q)=>{const p=fmt(q.quotePrice),v=fmt(q.volume);return(p!==null&&v!==null)?a+p*v:a;},0);
+                const budgetTot =pricedSq.reduce((a,q)=>{const b=fmt(q.sku.budgetPrice),v=fmt(q.volume);return(b!==null&&v!==null)?a+b*v:a;},0);
+                const listTot   =pricedSq.reduce((a,q)=>{const l=fmt(q.sku.listPrice),v=fmt(q.volume);return(l!==null&&v!==null)?a+l*v:a;},0);
+                const hasVal    =pricedSq.some(q=>fmt(q.quotePrice)!==null&&fmt(q.volume)!==null);
+                const hasBudget =pricedSq.some(q=>fmt(q.sku.budgetPrice)!==null&&fmt(q.volume)!==null);
+                const hasList   =pricedSq.some(q=>fmt(q.sku.listPrice)!==null&&fmt(q.volume)!==null);
+                const dB=hasBudget&&hasVal?totalVal-budgetTot:null;
+                const dL=hasList  &&hasVal?totalVal-listTot  :null;
+                const sc=hc(supplier);
+                return (
+                  <Card key={supplier}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                      <div style={{width:36,height:36,borderRadius:10,background:sc,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,color:"#555"}}>
+                        {supplier.slice(0,2).toUpperCase()}
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{fontWeight:500,fontSize:15}}>{supplier}</div>
+                        <div style={{fontSize:12,color:"#888",marginTop:2,display:"flex",gap:6,flexWrap:"wrap"}}>
+                          {[...new Set(sq.map(q=>q.status))].map(s=><Badge key={s} s={s}/>)}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:8,marginBottom:unpricedCount>0?8:12}}>
+                      <Chip label="SKUs quoted"         value={`${pricedIds.length} of ${includedSkuCount}`}/>
+                      <Chip label="Quote lines"         value={sq.length}/>
+                      {hasVal   &&<Chip label="Total quoted"        value={fmtC(totalVal)}/>}
+                      {dB!==null&&<Chip label="Δ vs budget (total)" value={fmtC(dB)} sub={budgetTot?fmtPct((dB/budgetTot)*100):""} col={dB<0?"#3B6D11":dB>0?"#A32D2D":"#888"}/>}
+                      {dL!==null&&<Chip label="Δ vs list (total)"   value={fmtC(dL)} sub={listTot?fmtPct((dL/listTot)*100):""}   col={dL<0?"#3B6D11":dL>0?"#A32D2D":"#888"}/>}
+                    </div>
+                    {unpricedCount>0&&<div style={{fontSize:11,color:"#888",marginBottom:12,padding:"5px 8px",background:"#f7f7f7",borderRadius:6}}>{unpricedCount} SKU{unpricedCount!==1?"s":""} without a price excluded from totals.</div>}
+                    <div style={{borderTop:"0.5px solid #e0e0e0",paddingTop:10,display:"flex",flexDirection:"column",gap:4}}>
+                      {skuIds.map(skuId=>{
+                        const sku=includedSkus.find(s=>s.id===skuId);
+                        const q=sq.find(q=>q.skuId===skuId);
+                        if(!sku||!q) return null;
+                        const priced=fmt(q.quotePrice)!==null;
+                        const lineVal=priced&&fmt(q.volume)!==null?fmt(q.quotePrice)*fmt(q.volume):null;
+                        return (
+                          <div key={skuId} style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,padding:"3px 0",gap:8,color:priced?"#888":"#bbb"}}>
+                            <span style={{flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              {sku.code&&<span style={{fontFamily:"monospace",marginRight:6,color:priced?"#1a1a1a":"#bbb"}}>{sku.code}</span>}
+                              {sku.description}{!priced&&<span style={{marginLeft:6,fontSize:10,color:"#bbb"}}>(no price)</span>}
+                            </span>
+                            <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}}>
+                              <Badge s={q.status}/>
+                              {priced&&<span style={{color:"#1a1a1a",fontWeight:500}}>{fmtC(q.quotePrice)}{q.volume?<span style={{fontWeight:400,color:"#aaa"}}> × {q.volume}</span>:""}</span>}
+                              {lineVal!==null&&<span style={{color:"#1a1a1a",fontWeight:500}}>{fmtC(lineVal)}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          );
+        })()}
+
+        {/* ── SKUS & QUOTES ── */}
+        {tab==="skus"&&(
+          <div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:500,color:"#888",letterSpacing:"0.06em",textTransform:"uppercase"}}>SKUs ({rs.length})</div>
+              <button onClick={()=>{setSkuForm(emptySku);setEditSkuId(null);setSkuStep(1);setView("skuForm");}} style={{fontSize:13,padding:"5px 14px"}}>+ Add SKU</button>
+            </div>
+            {rs.length===0?(
+              <div style={{textAlign:"center",padding:"3rem 1rem",color:"#888",fontSize:14,border:"0.5px dashed #ccc",borderRadius:12}}>No SKUs yet — add your first one.</div>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {rs.map(sku=>{
+                  const qs=sQuotes(sku.id);
+                  const prices=qs.map(q=>fmt(q.quotePrice)).filter(p=>p!==null);
+                  const best=prices.length>1?Math.min(...prices):null;
+                  const open=!collapsed[sku.id];
+                  const sc=hc(sku.code||sku.description);
+                  return (
+                    <div key={sku.id} style={{border:"0.5px solid #d0d0d0",borderRadius:12,overflow:"hidden"}}>
+                      <div style={{background:"#f7f7f7",padding:"10px 14px",display:"flex",alignItems:"center",gap:10}}>
+                        <div style={{width:32,height:32,borderRadius:8,background:sc,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:600,color:"#555"}}>
+                          {(sku.code||sku.description).slice(0,2).toUpperCase()}
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:500,fontSize:14,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                            {sku.code&&<span style={{fontFamily:"monospace",fontSize:12,background:"#fff",padding:"1px 6px",borderRadius:4,border:"0.5px solid #e0e0e0"}}>{sku.code}</span>}
+                            <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sku.description}</span>
+                          </div>
+                          <div style={{fontSize:12,color:"#888",marginTop:2,display:"flex",gap:12,flexWrap:"wrap"}}>
+                            {sku.uom&&<span>UoM: {sku.uom}</span>}
+                            {sku.targetQty&&<span>Target: {sku.targetQty}</span>}
+                            {fmt(sku.budgetPrice)!==null&&<span>Budget: {fmtC(sku.budgetPrice)}</span>}
+                            {fmt(sku.listPrice)!==null&&<span>List: {fmtC(sku.listPrice)}</span>}
+                            <span>{qs.length} quote{qs.length!==1?"s":""}</span>
+                          </div>
+                        </div>
+                        <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+                          <GBtn onClick={()=>{setSkuForm({code:sku.code,description:sku.description,uom:sku.uom,targetQty:sku.targetQty,budgetPrice:sku.budgetPrice,listPrice:sku.listPrice});setEditSkuId(sku.id);setSkuStep(1);setView("skuForm");}}>Edit</GBtn>
+                          <DBtn onClick={()=>setDelSku(sku.id)}>Delete</DBtn>
+                          <button onClick={()=>tog(sku.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,padding:"2px 6px",color:"#888"}}>{open?"▲":"▼"}</button>
+                        </div>
+                      </div>
+                      {delSku===sku.id&&<div style={{padding:"0 14px"}}><ConfirmBar msg={`Delete "${sku.description}" and all its quotes?`}
+                        onOk={()=>{save(undefined,skus.filter(s=>s.id!==sku.id),quotes.filter(q=>q.skuId!==sku.id));setDelSku(null);}}
+                        onCancel={()=>setDelSku(null)}/></div>}
+                      {open&&(
+                        <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                          {qs.length===0?(
+                            <div style={{textAlign:"center",padding:"1.5rem",color:"#888",fontSize:13,border:"0.5px dashed #ccc",borderRadius:8}}>No quotes yet for this SKU.</div>
+                          ):qs.map(q=>{
+                            const dB=delta(q.quotePrice,sku.budgetPrice,q.volume);
+                            const dL=delta(q.quotePrice,sku.listPrice,q.volume);
+                            const isAw=q.status==="Awarded";
+                            const isBest=best!==null&&fmt(q.quotePrice)===best;
+                            const qc=hc(q.supplier);
+                            return (
+                              <div key={q.id} style={{background:"#fff",border:`${(isAw||isBest)?"1":"0.5"}px solid ${isAw?"#97C459":isBest?"#5DCAA5":"#e0e0e0"}`,borderRadius:8,padding:"10px 12px"}}>
+                                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8}}>
+                                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                    <div style={{width:28,height:28,borderRadius:6,background:qc,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:600,color:"#555"}}>
+                                      {q.supplier.slice(0,2).toUpperCase()}
+                                    </div>
+                                    <div>
+                                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                        <span style={{fontWeight:500,fontSize:13}}>{q.supplier}</span>
+                                        {isBest&&<span style={{fontSize:10,fontWeight:500,padding:"1px 6px",borderRadius:20,background:"#E1F5EE",color:"#0F6E56"}}>Best price</span>}
+                                      </div>
+                                      {q.notes&&<div style={{fontSize:11,color:"#888"}}>{q.notes}</div>}
+                                    </div>
+                                  </div>
+                                  <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                                    <Badge s={q.status}/>
+                                    <GBtn onClick={()=>{setQForm({supplier:q.supplier,status:q.status,quotePrice:q.quotePrice,volume:q.volume,leadTime:q.leadTime,notes:q.notes});setEditQId(q.id);setSelSku(sku);setView("quoteForm");}}>Edit</GBtn>
+                                    <DBtn onClick={()=>setDelQ(q.id)}>Delete</DBtn>
+                                  </div>
+                                </div>
+                                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(100px,1fr))",gap:6}}>
+                                  {fmt(q.quotePrice)!==null&&<Chip label="Quote price" value={fmtC(q.quotePrice)}/>}
+                                  {q.volume&&<Chip label="Volume" value={`${q.volume}${sku.uom?" "+sku.uom:""}`}/>}
+                                  {q.leadTime&&<Chip label="Lead time" value={q.leadTime}/>}
+                                  {fmt(sku.budgetPrice)!==null&&dB.unit!=="—"&&<Chip label="Δ vs budget" value={dB.unit} sub={`${dB.pct}${dB.total?` · ${dB.total}`:""}`} col={dB.col}/>}
+                                  {fmt(sku.listPrice)!==null&&dL.unit!=="—"&&<Chip label="Δ vs list"   value={dL.unit} sub={`${dL.pct}${dL.total?` · ${dL.total}`:""}`} col={dL.col}/>}
+                                </div>
+                                {delQ===q.id&&<ConfirmBar msg={`Delete quote from ${q.supplier}?`}
+                                  onOk={()=>{save(undefined,undefined,quotes.filter(x=>x.id!==q.id));setDelQ(null);}}
+                                  onCancel={()=>setDelQ(null)}/>}
+                              </div>
+                            );
+                          })}
+                          <button onClick={()=>{setQForm(emptyQuote);setEditQId(null);setSelSku(sku);setView("quoteForm");}}
+                            style={{fontSize:12,padding:"6px",border:"0.5px dashed #ccc",borderRadius:8,background:"transparent",cursor:"pointer",color:"#888",width:"100%"}}>
+                            + Add quote for this SKU
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── RFQ LIST ──────────────────────────────────────────
+  const filtered=rfqs.filter(r=>{
+    const ms=filter==="All"||r.status===filter;
+    const q=search.toLowerCase();
+    return ms&&(!q||r.title.toLowerCase().includes(q));
+  });
+  const counts=STATUSES.reduce((a,s)=>({...a,[s]:rfqs.filter(r=>r.status===s).length}),{});
+  const totalOpen=rfqs.filter(r=>!["Awarded","Cancelled"].includes(r.status)).length;
+
+  return (
+    <div style={{padding:"1rem 0"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1.5rem"}}>
+        <div>
+          <h2 style={{margin:"0 0 3px",fontSize:20,fontWeight:500}}>RFQ Manager</h2>
+          <div style={{fontSize:13,color:"#888"}}>{totalOpen} open · {rfqs.length} total</div>
+        </div>
+        <PBtn onClick={()=>{setRfqForm(emptyRfq);setEditRfqId(null);setView("rfqForm");}}>+ New RFQ</PBtn>
+      </div>
+      {rfqs.length>0&&(
+        <div style={{display:"flex",gap:6,marginBottom:"1.25rem",flexWrap:"wrap"}}>
+          {["All",...STATUSES].map(s=>{
+            const cnt=s==="All"?rfqs.length:counts[s];
+            const active=filter===s;
+            return (
+              <button key={s} onClick={()=>setFilter(s)} style={{fontSize:12,padding:"4px 12px",borderRadius:20,cursor:"pointer",fontWeight:active?500:400,
+                background:active?(S[s]?.bg||"#f0f0f0"):"transparent",
+                color:active?(S[s]?.color||"#1a1a1a"):"#888",
+                border:active?"0.5px solid transparent":"0.5px solid #e0e0e0"}}>
+                {s}{cnt>0?<span style={{opacity:0.7}}> · {cnt}</span>:""}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div style={{position:"relative",marginBottom:"1.25rem"}}>
+        <span style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:"#888",pointerEvents:"none"}}>⌕</span>
+        <input placeholder="Search RFQs…" value={search} onChange={e=>setSearch(e.target.value)} style={{width:"100%",paddingLeft:30}}/>
+      </div>
+      {filtered.length===0?(
+        <div style={{textAlign:"center",padding:"4rem 1rem",color:"#888",fontSize:14,border:"0.5px dashed #ccc",borderRadius:12}}>
+          {rfqs.length===0?"No RFQs yet — create your first one.":"No results match your filter."}
+        </div>
+      ):(
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {filtered.map(r=>{
+            const rs2=rSkus(r.id);
+            const totalQ2=rs2.reduce((a,s)=>a+sQuotes(s.id).length,0);
+            const aw=rs2.some(s=>sQuotes(s.id).some(q=>q.status==="Awarded"));
+            const bg=hc(r.title);
+            return (
+              <Card key={r.id} onClick={()=>{setSelRfq(r);setDelRfq(false);setTab("skus");setView("detail");}}
+                style={{cursor:"pointer",padding:"0.9rem 0",overflow:"hidden"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="#aaa"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="#e0e0e0"}>
+                <div style={{display:"flex",alignItems:"center"}}>
+                  <div style={{width:5,alignSelf:"stretch",background:bg,borderRadius:"4px 0 0 4px",flexShrink:0,marginRight:14}}/>
+                  <div style={{flex:1,minWidth:0,paddingRight:"1.25rem"}}>
+                    <div style={{fontWeight:500,fontSize:14,marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.title}</div>
+                    <div style={{fontSize:12,color:"#888",display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+                      <Badge s={r.status}/>
+                      <span>{rs2.length} SKU{rs2.length!==1?"s":""}</span>
+                      <span>{totalQ2} quote{totalQ2!==1?"s":""}</span>
+                      {r.dueDate&&<span>Due {r.dueDate}</span>}
+                      {aw&&<span style={{color:"#3B6D11"}}>✓ Awarded</span>}
+                    </div>
+                  </div>
+                  <span style={{fontSize:16,color:"#888",flexShrink:0,marginRight:"1.25rem"}}>›</span>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+
+if("serviceWorker" in navigator) {
+  window.addEventListener("load", ()=>navigator.serviceWorker.register("sw.js"));
+}
+</script>
+</body>
+</html>
