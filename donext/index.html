@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Next — one action per project</title>
+<meta name="theme-color" content="#EEF0EC">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Next">
+<link rel="manifest" href='data:application/manifest+json,{"name":"Next","short_name":"Next","display":"standalone","background_color":"%23EEF0EC","theme_color":"%23EEF0EC","start_url":".","icons":[]}'>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230C6E64'/%3E%3Ctext x='90' y='118' font-family='-apple-system,sans-serif' font-size='96' font-weight='800' fill='%23FBFBF9' text-anchor='middle'%3E%E2%86%92%3C/text%3E%3C/svg%3E">
+<style>
+  :root{
+    --paper:#E7DFCD;
+    --card:#FBF7EC;
+    --ink:#2C271E;
+    --ink-soft:#7C7362;
+    --line:#DBD0B8;
+    --accent:#0E6A5C;
+    --accent-soft:#DCE8E1;
+    --warn:#9C6410;
+    --warn-soft:#F1E6CE;
+    --danger:#96382A;
+    --radius:12px;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,"Helvetica Neue",sans-serif;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    /* faint paper grain, inline so it works offline / from SharePoint */
+    --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--sans);
+    min-height:100vh;
+    padding:max(16px,env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom));
+    position:relative;
+  }
+  /* paper grain sits over everything but never intercepts taps */
+  body::before{
+    content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:var(--grain);background-size:140px 140px;
+    opacity:.05;mix-blend-mode:multiply;
+  }
+  header,main,.overlay{position:relative;z-index:1}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  input{font-family:inherit}
+
+  /* ---------- header ---------- */
+  header{
+    max-width:1060px;margin:0 auto 22px;
+    display:flex;align-items:flex-end;justify-content:space-between;gap:12px;
+  }
+  .brand h1{
+    font-family:var(--serif);
+    font-size:clamp(28px,5vw,38px);
+    font-weight:700;letter-spacing:-0.01em;line-height:1;
+  }
+  .brand h1 .arrow{color:var(--accent)}
+  .brand p{
+    font-family:var(--mono);font-size:11px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink-soft);margin-top:6px;
+  }
+  .btn{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:14px;font-weight:600;
+    padding:10px 16px;border-radius:999px;
+    background:var(--ink);color:var(--card);
+    transition:transform .12s ease, background .12s ease;
+    white-space:nowrap;
+  }
+  .btn:active{transform:scale(.97)}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .btn.accent{background:var(--accent)}
+  .btn.danger-ghost{background:transparent;color:var(--danger);border:1px solid var(--line)}
+  .btn.small{padding:7px 12px;font-size:13px}
+
+  /* ---------- card grid ---------- */
+  main{max-width:1060px;margin:0 auto}
+  .grid{
+    display:grid;gap:14px;
+    grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:18px 18px 14px;
+    display:flex;flex-direction:column;gap:14px;
+    min-height:190px;
+    text-align:left;width:100%;
+    transition:transform .14s ease, box-shadow .14s ease;
+    box-shadow:0 1px 0 rgba(0,0,0,.04), 0 2px 3px rgba(75,60,30,.10), 0 10px 22px -14px rgba(75,60,30,.22);
+  }
+  .card:hover{transform:translateY(-3px) rotate(-.15deg);box-shadow:0 2px 0 rgba(0,0,0,.04), 0 6px 10px rgba(75,60,30,.12), 0 18px 34px -16px rgba(75,60,30,.28)}
+  .card:active{transform:translateY(-1px)}
+  .card-eyebrow{
+    display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.07em;
+    text-transform:uppercase;color:var(--ink-soft);
+  }
+  .card-eyebrow .name{
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    color:var(--ink);font-weight:600;
+  }
+  .card-eyebrow .counts{flex-shrink:0}
+  .card-action{
+    flex:1;
+    font-family:var(--serif);
+    font-size:clamp(20px,2.7vw,23px);
+    font-weight:600;letter-spacing:-0.005em;line-height:1.3;
+    overflow-wrap:anywhere;
+    padding-bottom:6px;
+    background-image:linear-gradient(to right, var(--line), var(--line));
+    background-repeat:no-repeat;
+    background-position:0 100%;
+    background-size:44px 1px;
+  }
+  .card-action .next-label{
+    display:block;font-family:var(--mono);font-size:10px;font-weight:400;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--accent);
+    margin-bottom:7px;
+  }
+  .card.undecided{border-style:dashed;border-color:#CBB489;background:var(--warn-soft)}
+  .card.undecided .card-action{color:var(--warn);font-weight:500;font-size:18px;background-image:none}
+  .card.undecided .next-label{color:var(--warn)}
+  .card-foot{
+    display:flex;justify-content:space-between;align-items:center;gap:8px;
+    border-top:1px solid var(--line);padding-top:11px;
+  }
+  .chip{
+    font-family:var(--mono);font-size:11px;letter-spacing:.04em;
+    color:var(--ink-soft);
+  }
+  .chip.due{color:var(--accent);font-weight:600}
+  .chip.overdue{color:var(--danger);font-weight:600}
+  .done-btn{
+    font-size:13px;font-weight:700;color:var(--accent);
+    padding:7px 13px;border-radius:999px;border:1.5px solid var(--accent);
+    background:var(--card);
+    transition:background .12s ease,color .12s ease;
+  }
+  .done-btn:hover{background:var(--accent);color:var(--card)}
+  .open-hint{font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+
+  .empty-state{
+    max-width:520px;margin:64px auto;text-align:center;color:var(--ink-soft);
+  }
+  .empty-state .big{font-size:44px;margin-bottom:14px;color:var(--accent)}
+  .empty-state h2{font-size:19px;color:var(--ink);margin-bottom:8px;letter-spacing:-0.01em}
+  .empty-state p{font-size:14px;line-height:1.55}
+
+  /* ---------- detail sheet ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(32,39,43,.42);
+    display:none;align-items:flex-end;justify-content:center;
+    z-index:20;backdrop-filter:blur(2px);
+  }
+  .overlay.open{display:flex}
+  .sheet{
+    background:var(--paper);
+    width:100%;max-width:680px;
+    max-height:92vh;max-height:92dvh;
+    border-radius:20px 20px 0 0;
+    overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:18px 18px calc(28px + env(safe-area-inset-bottom));
+    animation:rise .22s ease;
+  }
+  @keyframes rise{from{transform:translateY(28px);opacity:.6}to{transform:translateY(0);opacity:1}}
+  @media(min-width:720px){
+    .overlay{align-items:center;padding:24px}
+    .sheet{border-radius:20px}
+  }
+  @media(prefers-reduced-motion:reduce){
+    .sheet{animation:none}
+    .card,.btn{transition:none}
+  }
+  .sheet-head{
+    display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:18px;
+  }
+  .sheet-head h2{font-family:var(--serif);font-size:24px;font-weight:700;letter-spacing:-0.01em;overflow-wrap:anywhere}
+  .sheet-head .meta{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:5px;letter-spacing:.05em}
+  .icon-btn{
+    flex-shrink:0;width:34px;height:34px;border-radius:50%;
+    display:grid;place-items:center;font-size:16px;
+    border:1px solid var(--line);background:var(--card);color:var(--ink-soft);
+  }
+  .section{margin-bottom:22px}
+  .section-label{
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-soft);margin-bottom:9px;
+    display:flex;justify-content:space-between;align-items:baseline;
+  }
+  .section-label .accented{color:var(--accent)}
+
+  .next-block{
+    background:var(--card);border:1.5px solid var(--accent);
+    border-radius:var(--radius);padding:15px 16px;
+    display:flex;flex-direction:column;gap:12px;
+  }
+  .next-block .text{font-family:var(--serif);font-size:20px;font-weight:600;letter-spacing:-0.005em;line-height:1.32;overflow-wrap:anywhere}
+  .next-block .row{display:flex;gap:8px;flex-wrap:wrap}
+  .next-block.none{
+    border:1.5px dashed #CBB489;background:var(--warn-soft);
+  }
+  .next-block.none .text{color:var(--warn);font-weight:600;font-size:15px}
+
+  ul.tasks{list-style:none;display:flex;flex-direction:column;gap:8px}
+  .task{
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:11px 13px;display:flex;align-items:center;gap:11px;
+  }
+  .task .pick{
+    flex-shrink:0;width:21px;height:21px;border-radius:50%;
+    border:1.5px solid var(--ink-soft);background:var(--card);
+    display:grid;place-items:center;color:transparent;font-size:11px;font-weight:800;
+    transition:background .12s ease,border-color .12s ease;
+  }
+  .task .pick:hover{border-color:var(--accent)}
+  .task .body{flex:1;min-width:0}
+  .task .body .t{font-size:15px;line-height:1.35;overflow-wrap:anywhere}
+  .task .body .d{font-family:var(--mono);font-size:11px;color:var(--ink-soft);margin-top:3px}
+  .task .body .d.overdue{color:var(--danger);font-weight:600}
+  .task .del{flex-shrink:0;color:var(--ink-soft);font-size:15px;padding:5px}
+  .task .del:hover{color:var(--danger)}
+  .task.completed .t{text-decoration:line-through;color:var(--ink-soft)}
+  .task.completed{
+    background:transparent;border:none;border-radius:0;
+    border-bottom:1px solid var(--line);
+    padding:9px 2px;
+  }
+  ul.tasks .task.completed:last-child{border-bottom:none}
+  .hint{font-size:13px;color:var(--ink-soft);line-height:1.5;padding:4px 2px}
+
+  .add-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .add-row input[type=text]{
+    flex:1;min-width:160px;
+    padding:11px 13px;border-radius:12px;border:1px solid var(--line);
+    background:var(--card);font-size:15px;color:var(--ink);
+  }
+  .add-row input[type=date]{
+    padding:10px 11px;border-radius:12px;border:1px solid var(--line);
+    background:var(--card);font-size:14px;color:var(--ink);font-family:var(--mono);
+  }
+  .add-row input::placeholder{color:var(--ink-soft)}
+
+  .sheet-foot{margin-top:26px;display:flex;justify-content:center}
+
+  /* new project modal */
+  .modal-card{
+    background:var(--paper);border-radius:20px;width:100%;max-width:440px;
+    padding:22px 20px;margin:auto;
+  }
+  .modal-card h2{font-family:var(--serif);font-size:21px;font-weight:700;margin-bottom:14px;letter-spacing:-0.005em}
+  .modal-card .add-row{margin-top:0}
+  .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+
+  .toast{
+    position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));
+    transform:translateX(-50%) translateY(8px);
+    background:var(--ink);color:var(--card);
+    font-size:13.5px;font-weight:600;
+    padding:10px 18px;border-radius:999px;
+    opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease;
+    z-index:40;max-width:90vw;text-align:center;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>Next<span class="arrow">&nbsp;&rarr;</span></h1>
+    <p>One action per project. Decide it.</p>
+  </div>
+  <button class="btn" id="newProjectBtn">+ New project</button>
+</header>
+
+<main>
+  <div class="grid" id="grid"></div>
+  <div class="empty-state" id="emptyState" hidden>
+    <div class="big">&rarr;</div>
+    <h2>No projects yet</h2>
+    <p>Add a project, then commit to the single next physical action that moves it forward. Everything else waits in the queue.</p>
+  </div>
+</main>
+
+<!-- detail sheet -->
+<div class="overlay" id="detailOverlay">
+  <div class="sheet" role="dialog" aria-modal="true" id="sheet">
+    <div class="sheet-head">
+      <div>
+        <h2 id="sheetTitle"></h2>
+        <div class="meta" id="sheetMeta"></div>
+      </div>
+      <button class="icon-btn" id="closeSheet" aria-label="Close">&times;</button>
+    </div>
+
+    <div class="section">
+      <div class="section-label"><span class="accented">Next action</span></div>
+      <div id="nextBlock"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-label"><span>Queued</span><span id="queueCount"></span></div>
+      <ul class="tasks" id="queueList"></ul>
+      <div class="add-row">
+        <input type="text" id="newTaskInput" placeholder="Preload a task&hellip;" maxlength="300">
+        <input type="date" id="newTaskDate" aria-label="Optional scheduled date">
+        <button class="btn accent small" id="addTaskBtn">Add</button>
+      </div>
+      <p class="hint">Tap the circle beside a task to make it the next action. Only one can hold that spot.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-label"><span>Completed</span><span id="doneCount"></span></div>
+      <ul class="tasks" id="doneList"></ul>
+    </div>
+
+    <div class="sheet-foot">
+      <button class="btn danger-ghost small" id="deleteProjectBtn">Delete project</button>
+    </div>
+  </div>
+</div>
+
+<!-- new project modal -->
+<div class="overlay" id="newOverlay">
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <h2>New project</h2>
+    <div class="add-row">
+      <input type="text" id="newProjectInput" placeholder="Project name" maxlength="120">
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost small" id="cancelNew">Cancel</button>
+      <button class="btn accent small" id="createNew">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- confirm dialog -->
+<div class="overlay" id="confirmOverlay" style="z-index:30">
+  <div class="modal-card" role="alertdialog" aria-modal="true" style="max-width:400px">
+    <h2 id="confirmText" style="margin-bottom:6px"></h2>
+    <p class="hint" id="confirmSub" style="padding:0 0 4px"></p>
+    <div class="modal-actions">
+      <button class="btn ghost small" id="confirmCancel">Cancel</button>
+      <button class="btn small" id="confirmOk" style="background:var(--danger)">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- storage (safe wrapper: falls back to memory if unavailable) ---------- */
+  var KEY = "nextaction.v1";
+  var memStore = null;
+  function loadState(){
+    try{
+      var raw = localStorage.getItem(KEY);
+      if(raw) return JSON.parse(raw);
+    }catch(e){ /* storage unavailable (e.g. preview sandbox) */ }
+    return memStore || { projects: [] };
+  }
+  function saveState(){
+    memStore = state;
+    try{ localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch(e){ /* keep in-memory only */ }
+  }
+
+  var state = loadState();
+  var openProjectId = null;
+
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+  function findProject(id){ return state.projects.find(function(p){ return p.id === id; }); }
+
+  /* ---------- helpers ---------- */
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+  function todayISO(){
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  }
+  function fmtDate(iso){
+    if(!iso) return "";
+    var parts = iso.split("-");
+    var d = new Date(+parts[0], +parts[1]-1, +parts[2]);
+    return d.toLocaleDateString(undefined, {day:"numeric", month:"short"});
+  }
+  function fmtStamp(ts){
+    var d = new Date(ts);
+    return d.toLocaleDateString(undefined,{day:"numeric",month:"short"}) + " " +
+           d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});
+  }
+  function isOverdue(iso){ return iso && iso < todayISO(); }
+
+  var toastTimer = null;
+  function toast(msg){
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 2200);
+  }
+
+  /* in-app confirm (window.confirm is blocked in sandboxed previews) */
+  function askConfirm(title, sub, okLabel){
+    return new Promise(function(resolve){
+      var ov = document.getElementById("confirmOverlay");
+      document.getElementById("confirmText").textContent = title;
+      document.getElementById("confirmSub").textContent = sub || "";
+      var okBtn = document.getElementById("confirmOk");
+      var cancelBtn = document.getElementById("confirmCancel");
+      okBtn.textContent = okLabel || "Delete";
+      ov.classList.add("open");
+      function cleanup(result){
+        ov.classList.remove("open");
+        okBtn.removeEventListener("click", onOk);
+        cancelBtn.removeEventListener("click", onCancel);
+        ov.removeEventListener("click", onBackdrop);
+        resolve(result);
+      }
+      function onOk(){ cleanup(true); }
+      function onCancel(){ cleanup(false); }
+      function onBackdrop(e){ if(e.target === ov) cleanup(false); }
+      okBtn.addEventListener("click", onOk);
+      cancelBtn.addEventListener("click", onCancel);
+      ov.addEventListener("click", onBackdrop);
+    });
+  }
+
+  /* ---------- mutations ---------- */
+  function addProject(name){
+    state.projects.unshift({ id: uid(), name: name, created: Date.now(), nextId: null, queue: [], done: [] });
+    saveState();
+  }
+  function deleteProject(id){
+    state.projects = state.projects.filter(function(p){ return p.id !== id; });
+    saveState();
+  }
+  function addTask(p, text, date){
+    var t = { id: uid(), text: text, created: Date.now(), scheduled: date || null };
+    p.queue.push(t);
+    if(p.queue.length === 1 && !p.nextId){ p.nextId = t.id; } /* first task becomes next by default */
+    saveState();
+    return t;
+  }
+  function deleteTask(p, taskId){
+    p.queue = p.queue.filter(function(t){ return t.id !== taskId; });
+    if(p.nextId === taskId) p.nextId = null;
+    saveState();
+  }
+  function deleteDone(p, taskId){
+    p.done = p.done.filter(function(t){ return t.id !== taskId; });
+    saveState();
+  }
+  function setNext(p, taskId){
+    p.nextId = (p.nextId === taskId) ? null : taskId;
+    saveState();
+  }
+  function completeNext(p){
+    var idx = p.queue.findIndex(function(t){ return t.id === p.nextId; });
+    if(idx === -1) return;
+    var t = p.queue.splice(idx,1)[0];
+    t.completedAt = Date.now();
+    p.done.unshift(t);
+    p.nextId = null; /* deliberately unset: the user must decide the next action */
+    saveState();
+  }
+
+  /* ---------- render: card grid ---------- */
+  function renderGrid(){
+    var grid = document.getElementById("grid");
+    var empty = document.getElementById("emptyState");
+    grid.innerHTML = "";
+    empty.hidden = state.projects.length > 0;
+
+    state.projects.forEach(function(p){
+      var next = p.queue.find(function(t){ return t.id === p.nextId; });
+      var card = document.createElement("button");
+      card.className = "card" + (next ? "" : " undecided");
+      card.setAttribute("aria-label", "Open project " + p.name);
+
+      var counts = p.queue.length + " queued &middot; " + p.done.length + " done";
+      var actionHtml;
+      if(next){
+        actionHtml = '<span class="next-label">Next action</span>' + esc(next.text);
+      } else if(p.queue.length){
+        actionHtml = '<span class="next-label">Undecided</span>Pick the next action from ' + p.queue.length + ' queued task' + (p.queue.length>1?'s':'') + '.';
+      } else {
+        actionHtml = '<span class="next-label">Undecided</span>What is the next physical action here?';
+      }
+
+      var chipHtml = "";
+      if(next && next.scheduled){
+        chipHtml = '<span class="chip ' + (isOverdue(next.scheduled) ? "overdue" : "due") + '">' +
+                   (isOverdue(next.scheduled) ? "overdue " : "") + esc(fmtDate(next.scheduled)) + '</span>';
+      }
+
+      card.innerHTML =
+        '<div class="card-eyebrow"><span class="name">' + esc(p.name) + '</span><span class="counts">' + counts + '</span></div>' +
+        '<div class="card-action">' + actionHtml + '</div>' +
+        '<div class="card-foot">' +
+          (chipHtml || '<span class="open-hint">tap to open</span>') +
+          (next ? '<span class="done-btn" data-done="' + p.id + '">Done &check;</span>' : '<span class="open-hint">&rarr;</span>') +
+        '</div>';
+
+      card.addEventListener("click", function(ev){
+        var doneEl = ev.target.closest("[data-done]");
+        if(doneEl){
+          ev.stopPropagation();
+          var proj = findProject(doneEl.getAttribute("data-done"));
+          if(proj){
+            completeNext(proj);
+            renderGrid();
+            toast("Done. Decide the next action.");
+            openDetail(proj.id);
+          }
+          return;
+        }
+        openDetail(p.id);
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  /* ---------- render: detail sheet ---------- */
+  function openDetail(id){
+    openProjectId = id;
+    renderDetail();
+    document.getElementById("detailOverlay").classList.add("open");
+  }
+  function closeDetail(){
+    openProjectId = null;
+    document.getElementById("detailOverlay").classList.remove("open");
+  }
+
+  function renderDetail(){
+    var p = findProject(openProjectId);
+    if(!p){ closeDetail(); return; }
+
+    document.getElementById("sheetTitle").textContent = p.name;
+    document.getElementById("sheetMeta").textContent =
+      "started " + new Date(p.created).toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"});
+
+    /* next block */
+    var next = p.queue.find(function(t){ return t.id === p.nextId; });
+    var nb = document.getElementById("nextBlock");
+    if(next){
+      nb.innerHTML =
+        '<div class="next-block">' +
+          '<div class="text">' + esc(next.text) + '</div>' +
+          (next.scheduled ? '<div class="chip ' + (isOverdue(next.scheduled)?"overdue":"due") + '">scheduled ' + esc(fmtDate(next.scheduled)) + '</div>' : '') +
+          '<div class="row">' +
+            '<button class="btn accent small" data-act="complete">Mark done &check;</button>' +
+            '<button class="btn ghost small" data-act="unset">Return to queue</button>' +
+          '</div>' +
+        '</div>';
+    } else {
+      nb.innerHTML =
+        '<div class="next-block none">' +
+          '<div class="text">No next action decided. ' +
+          (p.queue.length ? 'Promote a queued task below, or add a new one.' : 'Add the first task below and it takes the spot.') +
+          '</div>' +
+        '</div>';
+    }
+    nb.querySelectorAll("[data-act]").forEach(function(b){
+      b.addEventListener("click", function(){
+        if(b.getAttribute("data-act") === "complete"){
+          completeNext(p);
+          toast("Done. Decide the next action.");
+        } else {
+          p.nextId = null; saveState();
+        }
+        renderDetail(); renderGrid();
+      });
+    });
+
+    /* queue list */
+    var ql = document.getElementById("queueList");
+    var queued = p.queue.filter(function(t){ return t.id !== p.nextId; });
+    document.getElementById("queueCount").textContent = queued.length ? queued.length + " waiting" : "";
+    ql.innerHTML = "";
+    if(!queued.length){
+      ql.innerHTML = '<li class="hint">Nothing waiting. Preload the steps you can already foresee.</li>';
+    }
+    queued
+      .slice()
+      .sort(function(a,b){
+        if(a.scheduled && b.scheduled) return a.scheduled < b.scheduled ? -1 : 1;
+        if(a.scheduled) return -1;
+        if(b.scheduled) return 1;
+        return a.created - b.created;
+      })
+      .forEach(function(t){
+        var li = document.createElement("li");
+        li.className = "task";
+        li.innerHTML =
+          '<button class="pick" title="Make this the next action" aria-label="Make this the next action">&check;</button>' +
+          '<div class="body"><div class="t">' + esc(t.text) + '</div>' +
+          (t.scheduled ? '<div class="d' + (isOverdue(t.scheduled)?' overdue':'') + '">' + (isOverdue(t.scheduled)?'overdue &middot; ':'') + esc(fmtDate(t.scheduled)) + '</div>' : '') +
+          '</div>' +
+          '<button class="del" title="Delete task" aria-label="Delete task">&times;</button>';
+        li.querySelector(".pick").addEventListener("click", function(){
+          setNext(p, t.id); renderDetail(); renderGrid();
+        });
+        li.querySelector(".del").addEventListener("click", function(){
+          askConfirm("Delete this task?", "", "Delete").then(function(ok){
+            if(ok){ deleteTask(p, t.id); renderDetail(); renderGrid(); }
+          });
+        });
+        ql.appendChild(li);
+      });
+
+    /* done list */
+    var dl = document.getElementById("doneList");
+    document.getElementById("doneCount").textContent = p.done.length ? p.done.length + " logged" : "";
+    dl.innerHTML = "";
+    if(!p.done.length){
+      dl.innerHTML = '<li class="hint">Completed actions will build a log of this project\u2019s progress.</li>';
+    }
+    p.done.forEach(function(t){
+      var li = document.createElement("li");
+      li.className = "task completed";
+      li.innerHTML =
+        '<div class="body"><div class="t">' + esc(t.text) + '</div>' +
+        '<div class="d">' + esc(fmtStamp(t.completedAt)) + '</div></div>' +
+        '<button class="del" title="Delete from log" aria-label="Delete from log">&times;</button>';
+      li.querySelector(".del").addEventListener("click", function(){
+        askConfirm("Remove from log?", "This completed action will be deleted.", "Remove").then(function(ok){
+          if(ok){ deleteDone(p, t.id); renderDetail(); renderGrid(); }
+        });
+      });
+      dl.appendChild(li);
+    });
+  }
+
+  /* ---------- wiring ---------- */
+  document.getElementById("closeSheet").addEventListener("click", closeDetail);
+  document.getElementById("detailOverlay").addEventListener("click", function(e){
+    if(e.target === this) closeDetail();
+  });
+  document.addEventListener("keydown", function(e){
+    if(e.key === "Escape"){
+      if(document.getElementById("confirmOverlay").classList.contains("open")) return;
+      closeDetail();
+      document.getElementById("newOverlay").classList.remove("open");
+    }
+  });
+
+  function submitTask(){
+    var p = findProject(openProjectId);
+    if(!p) return;
+    var input = document.getElementById("newTaskInput");
+    var dateInput = document.getElementById("newTaskDate");
+    var text = input.value.trim();
+    if(!text) return;
+    addTask(p, text, dateInput.value || null);
+    input.value = ""; dateInput.value = "";
+    input.focus();
+    renderDetail(); renderGrid();
+  }
+  document.getElementById("addTaskBtn").addEventListener("click", submitTask);
+  document.getElementById("newTaskInput").addEventListener("keydown", function(e){
+    if(e.key === "Enter") submitTask();
+  });
+
+  document.getElementById("deleteProjectBtn").addEventListener("click", function(){
+    var p = findProject(openProjectId);
+    if(!p) return;
+    askConfirm("Delete \u201c" + p.name + "\u201d?", "The project and its entire history will be removed.", "Delete project").then(function(ok){
+      if(ok){ deleteProject(p.id); closeDetail(); renderGrid(); }
+    });
+  });
+
+  /* new project modal */
+  var newOverlay = document.getElementById("newOverlay");
+  document.getElementById("newProjectBtn").addEventListener("click", function(){
+    newOverlay.classList.add("open");
+    var i = document.getElementById("newProjectInput");
+    i.value = ""; setTimeout(function(){ i.focus(); }, 60);
+  });
+  document.getElementById("cancelNew").addEventListener("click", function(){ newOverlay.classList.remove("open"); });
+  newOverlay.addEventListener("click", function(e){ if(e.target === this) newOverlay.classList.remove("open"); });
+  function submitProject(){
+    var name = document.getElementById("newProjectInput").value.trim();
+    if(!name) return;
+    addProject(name);
+    newOverlay.classList.remove("open");
+    renderGrid();
+    openDetail(state.projects[0].id); /* jump straight in to define the first action */
+  }
+  document.getElementById("createNew").addEventListener("click", submitProject);
+  document.getElementById("newProjectInput").addEventListener("keydown", function(e){
+    if(e.key === "Enter") submitProject();
+  });
+
+  renderGrid();
+})();
+</script>
+</body>
+</html>
