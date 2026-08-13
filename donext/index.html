@@ -32,6 +32,7 @@
     --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
   *{box-sizing:border-box;margin:0;padding:0}
+  [hidden]{display:none !important}
   html{-webkit-text-size-adjust:100%}
   body{
     background:var(--paper);
@@ -48,6 +49,22 @@
     opacity:.05;mix-blend-mode:multiply;
   }
   header,main,.overlay{position:relative;z-index:1}
+  footer.data-bar{
+    position:relative;z-index:1;
+    max-width:1060px;margin:38px auto 0;
+    border-top:1px solid var(--line);padding-top:14px;
+    display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  }
+  .data-label{
+    font-family:var(--mono);font-size:11px;letter-spacing:.05em;color:var(--ink-soft);
+  }
+  .data-actions{display:flex;gap:8px}
+  #rawText{
+    width:100%;height:200px;resize:vertical;
+    font-family:var(--mono);font-size:11px;line-height:1.45;
+    padding:11px;border-radius:12px;border:1px solid var(--line);
+    background:var(--card);color:var(--ink);
+  }
   button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
   button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   input{font-family:inherit}
@@ -346,6 +363,15 @@
   </div>
 </main>
 
+<footer class="data-bar">
+  <span class="data-label" id="dataSummary"></span>
+  <span class="data-actions">
+    <button class="btn ghost small" id="exportBtn">Export backup</button>
+    <button class="btn ghost small" id="importBtn">Import</button>
+  </span>
+  <input type="file" id="importFile" accept="application/json,.json" hidden>
+</footer>
+
 <!-- detail sheet -->
 <div class="overlay" id="detailOverlay">
   <div class="sheet" role="dialog" aria-modal="true" id="sheet">
@@ -394,6 +420,19 @@
     <div class="modal-actions">
       <button class="btn ghost small" id="cancelNew">Cancel</button>
       <button class="btn accent small" id="createNew">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- raw backup fallback (if download is blocked) -->
+<div class="overlay" id="rawOverlay" style="z-index:30">
+  <div class="modal-card" role="dialog" aria-modal="true" style="max-width:560px">
+    <h2>Copy your backup</h2>
+    <p class="hint" style="padding:0 0 10px">Downloading was blocked here. Select all, copy, and save this text somewhere safe — you can paste it back via Import.</p>
+    <textarea id="rawText" readonly spellcheck="false"></textarea>
+    <div class="modal-actions">
+      <button class="btn ghost small" id="rawClose">Close</button>
+      <button class="btn accent small" id="rawCopy">Copy</button>
     </div>
   </div>
 </div>
@@ -546,6 +585,7 @@
     document.getElementById("viewList").classList.toggle("active", isList);
     document.getElementById("emptyState").hidden = state.projects.length > 0;
     if(isList) renderList(); else renderCards();
+    updateDataSummary();
   }
 
   /* ---------- render: alphabetical index ---------- */
@@ -757,6 +797,10 @@
   document.addEventListener("keydown", function(e){
     if(e.key === "Escape"){
       if(document.getElementById("confirmOverlay").classList.contains("open")) return;
+      if(document.getElementById("rawOverlay").classList.contains("open")){
+        document.getElementById("rawOverlay").classList.remove("open");
+        return;
+      }
       closeDetail();
       document.getElementById("newOverlay").classList.remove("open");
     }
@@ -807,6 +851,121 @@
   document.getElementById("createNew").addEventListener("click", submitProject);
   document.getElementById("newProjectInput").addEventListener("keydown", function(e){
     if(e.key === "Enter") submitProject();
+  });
+
+  /* ---------- backup: export / import ---------- */
+  function updateDataSummary(){
+    var n = state.projects.length;
+    var tasks = state.projects.reduce(function(sum,p){ return sum + p.queue.length + p.done.length; }, 0);
+    document.getElementById("dataSummary").textContent =
+      n + " project" + (n===1?"":"s") + " \u00b7 " + tasks + " action" + (tasks===1?"":"s") + " stored on this device";
+  }
+
+  function exportBackup(){
+    var payload = JSON.stringify({
+      format: "nextaction-backup",
+      version: 1,
+      exported: new Date().toISOString(),
+      projects: state.projects
+    }, null, 2);
+    var d = new Date();
+    var stamp = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+    var filename = "next-action-backup-" + stamp + ".json";
+    try{
+      var blob = new Blob([payload], {type:"application/json"});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      toast("Backup downloaded");
+    }catch(e){
+      /* fallback: some sandboxes block downloads — offer the raw JSON to copy */
+      showRawBackup(payload);
+    }
+  }
+
+  function showRawBackup(payload){
+    var ov = document.getElementById("rawOverlay");
+    var ta = document.getElementById("rawText");
+    ta.value = payload;
+    ov.classList.add("open");
+    setTimeout(function(){ ta.focus(); ta.select(); }, 60);
+  }
+
+  function applyImport(parsed){
+    /* accept either the wrapped backup format or a bare projects array */
+    var incoming = Array.isArray(parsed) ? parsed : (parsed && parsed.projects);
+    if(!Array.isArray(incoming)) throw new Error("No projects found in that file.");
+
+    var clean = incoming.map(function(p){
+      if(!p || typeof p.name !== "string") throw new Error("File structure not recognised.");
+      return {
+        id: p.id || uid(),
+        name: p.name,
+        created: p.created || Date.now(),
+        nextId: p.nextId || null,
+        queue: Array.isArray(p.queue) ? p.queue : [],
+        done: Array.isArray(p.done) ? p.done : []
+      };
+    });
+
+    if(!clean.length) throw new Error("That backup contains no projects.");
+
+    var tasks = clean.reduce(function(s,p){ return s + p.queue.length + p.done.length; }, 0);
+    askConfirm(
+      "Restore " + clean.length + " project" + (clean.length===1?"":"s") + "?",
+      "This replaces everything currently stored on this device (" + state.projects.length +
+      " project" + (state.projects.length===1?"":"s") + "). " + tasks + " actions will be restored.",
+      "Replace"
+    ).then(function(ok){
+      if(!ok) return;
+      state.projects = clean;
+      saveState();
+      renderGrid();
+      updateDataSummary();
+      toast("Backup restored");
+    });
+  }
+
+  document.getElementById("rawClose").addEventListener("click", function(){
+    document.getElementById("rawOverlay").classList.remove("open");
+  });
+  document.getElementById("rawCopy").addEventListener("click", function(){
+    var ta = document.getElementById("rawText");
+    ta.select();
+    try{
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(ta.value).then(function(){ toast("Copied"); });
+      } else {
+        document.execCommand("copy"); toast("Copied");
+      }
+    }catch(e){ toast("Select the text and copy manually"); }
+  });
+
+  document.getElementById("exportBtn").addEventListener("click", exportBackup);
+  document.getElementById("importBtn").addEventListener("click", function(){
+    document.getElementById("importFile").click();
+  });
+  document.getElementById("importFile").addEventListener("change", function(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      try{
+        applyImport(JSON.parse(reader.result));
+      }catch(err){
+        askConfirm("Couldn't read that file", (err && err.message) || "It doesn't look like a Next backup.", "OK");
+      }
+      e.target.value = ""; /* allow re-importing the same file */
+    };
+    reader.onerror = function(){
+      askConfirm("Couldn't read that file", "The file could not be opened.", "OK");
+      e.target.value = "";
+    };
+    reader.readAsText(file);
   });
 
   /* view toggle */
