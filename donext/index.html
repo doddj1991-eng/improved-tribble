@@ -4,13 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Next — one action per project</title>
-<meta name="theme-color" content="#EEF0EC">
+<meta name="theme-color" content="#0E6A5C">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Next">
-<link rel="manifest" href='data:application/manifest+json,{"name":"Next","short_name":"Next","display":"standalone","background_color":"%23EEF0EC","theme_color":"%23EEF0EC","start_url":".","icons":[]}'>
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%230C6E64'/%3E%3Ctext x='90' y='118' font-family='-apple-system,sans-serif' font-size='96' font-weight='800' fill='%23FBFBF9' text-anchor='middle'%3E%E2%86%92%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href='data:application/manifest+json,{"name":"Next","short_name":"Next","display":"standalone","background_color":"%230E6A5C","theme_color":"%230E6A5C","start_url":".","icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png"},{"src":"icon-512.png","sizes":"512x512","type":"image/png"}]}'>
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <style>
   :root{
     --paper:#E7DFCD;
@@ -79,6 +80,53 @@
   .btn.accent{background:var(--accent)}
   .btn.danger-ghost{background:transparent;color:var(--danger);border:1px solid var(--line)}
   .btn.small{padding:7px 12px;font-size:13px}
+
+  /* ---------- view toggle ---------- */
+  .head-actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
+  .seg{
+    display:inline-flex;background:rgba(251,247,236,.55);
+    border:1px solid var(--line);border-radius:999px;padding:3px;
+  }
+  .seg-btn{
+    font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    padding:7px 13px;border-radius:999px;color:var(--ink-soft);font-weight:600;
+    transition:background .14s ease,color .14s ease;
+  }
+  .seg-btn.active{background:var(--ink);color:var(--card)}
+
+  /* ---------- index (alphabetical list) view ---------- */
+  ul.index-list{list-style:none;max-width:640px;margin:0 auto}
+  .idx-letter{
+    font-family:var(--mono);font-size:11px;letter-spacing:.14em;
+    color:var(--ink-soft);text-transform:uppercase;
+    padding:16px 4px 6px;
+  }
+  .idx-row{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    background:transparent;border:none;border-bottom:1px solid var(--line);
+    padding:14px 6px;
+    transition:background .12s ease,padding-left .12s ease;
+  }
+  .idx-row:hover{background:rgba(251,247,236,.7);padding-left:12px}
+  .idx-dot{
+    flex-shrink:0;width:9px;height:9px;border-radius:50%;
+    background:var(--accent);
+  }
+  .idx-dot.undecided{background:transparent;border:1.5px solid var(--warn)}
+  .idx-name{
+    flex:1;min-width:0;
+    font-family:var(--serif);font-size:18px;font-weight:600;letter-spacing:-0.005em;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .idx-count{
+    flex-shrink:0;font-family:var(--mono);font-size:11px;color:var(--ink-soft);
+    letter-spacing:.04em;
+  }
+  .idx-chev{flex-shrink:0;color:var(--ink-soft);font-size:14px}
+  @media(max-width:420px){
+    .seg-btn{padding:7px 10px;font-size:10px}
+    .brand p{display:none}
+  }
 
   /* ---------- card grid ---------- */
   main{max-width:1060px;margin:0 auto}
@@ -279,11 +327,18 @@
     <h1>Next<span class="arrow">&nbsp;&rarr;</span></h1>
     <p>One action per project. Decide it.</p>
   </div>
-  <button class="btn" id="newProjectBtn">+ New project</button>
+  <div class="head-actions">
+    <div class="seg" role="tablist" aria-label="View">
+      <button class="seg-btn" id="viewCards" role="tab">Board</button>
+      <button class="seg-btn" id="viewList" role="tab">Index</button>
+    </div>
+    <button class="btn" id="newProjectBtn">+ New</button>
+  </div>
 </header>
 
 <main>
   <div class="grid" id="grid"></div>
+  <ul class="index-list" id="indexList" hidden></ul>
   <div class="empty-state" id="emptyState" hidden>
     <div class="big">&rarr;</div>
     <h2>No projects yet</h2>
@@ -378,6 +433,7 @@
   }
 
   var state = loadState();
+  if(!state.view) state.view = "cards";
   var openProjectId = null;
 
   function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -481,11 +537,56 @@
   }
 
   /* ---------- render: card grid ---------- */
+  /* ---------- render: dispatcher ---------- */
   function renderGrid(){
+    var isList = state.view === "list";
+    document.getElementById("grid").hidden = isList;
+    document.getElementById("indexList").hidden = !isList;
+    document.getElementById("viewCards").classList.toggle("active", !isList);
+    document.getElementById("viewList").classList.toggle("active", isList);
+    document.getElementById("emptyState").hidden = state.projects.length > 0;
+    if(isList) renderList(); else renderCards();
+  }
+
+  /* ---------- render: alphabetical index ---------- */
+  function renderList(){
+    var list = document.getElementById("indexList");
+    list.innerHTML = "";
+    var sorted = state.projects.slice().sort(function(a,b){
+      return a.name.localeCompare(b.name, undefined, {sensitivity:"base", numeric:true});
+    });
+    var lastLetter = null;
+    sorted.forEach(function(p){
+      var letter = (p.name.trim()[0] || "#").toUpperCase();
+      if(!/[A-Z]/.test(letter)) letter = "#";
+      if(letter !== lastLetter){
+        lastLetter = letter;
+        var head = document.createElement("li");
+        head.className = "idx-letter";
+        head.textContent = letter;
+        list.appendChild(head);
+      }
+      var hasNext = p.queue.some(function(t){ return t.id === p.nextId; });
+      var li = document.createElement("li");
+      var row = document.createElement("button");
+      row.className = "idx-row";
+      row.setAttribute("aria-label", "Open project " + p.name);
+      row.innerHTML =
+        '<span class="idx-dot' + (hasNext ? '' : ' undecided') + '" title="' +
+          (hasNext ? 'Next action set' : 'No next action decided') + '"></span>' +
+        '<span class="idx-name">' + esc(p.name) + '</span>' +
+        '<span class="idx-count">' + p.queue.length + ' / ' + p.done.length + '</span>' +
+        '<span class="idx-chev">&rsaquo;</span>';
+      row.addEventListener("click", function(){ openDetail(p.id); });
+      li.appendChild(row);
+      list.appendChild(li);
+    });
+  }
+
+  /* ---------- render: card board ---------- */
+  function renderCards(){
     var grid = document.getElementById("grid");
-    var empty = document.getElementById("emptyState");
     grid.innerHTML = "";
-    empty.hidden = state.projects.length > 0;
 
     state.projects.forEach(function(p){
       var next = p.queue.find(function(t){ return t.id === p.nextId; });
@@ -707,6 +808,15 @@
   document.getElementById("newProjectInput").addEventListener("keydown", function(e){
     if(e.key === "Enter") submitProject();
   });
+
+  /* view toggle */
+  function setView(v){
+    state.view = v;
+    saveState();
+    renderGrid();
+  }
+  document.getElementById("viewCards").addEventListener("click", function(){ setView("cards"); });
+  document.getElementById("viewList").addEventListener("click", function(){ setView("list"); });
 
   renderGrid();
 })();
